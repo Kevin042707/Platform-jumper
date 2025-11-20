@@ -49,6 +49,7 @@
   }
 
   function rand(min,max){return Math.random()*(max-min)+min}
+
   function addPlatform(y){
     const w = rand(60,120);
     const x = rand(0, W - w);
@@ -56,8 +57,7 @@
   }
 
   function update(){
-    if(keys.left) player.vx -= 0.6;
-    if(keys.right) player.vx += 0.6;
+    player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
     player.vx *= 0.92;
     player.vy += gravity;
     player.x += player.vx; player.y += player.vy;
@@ -81,7 +81,9 @@
     if(keys.jump){
       for(let p of platforms){
         if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
-          player.vy = jumpVel; keys.jump=false; break;
+          player.vy = jumpVel;
+          keys.jump=false;
+          break;
         }
       }
     }
@@ -89,28 +91,28 @@
     if(player.y < H/3){
       const dy = Math.min((H/3 - player.y)*0.2, 12);
       player.y += dy;
-      for(let i=0;i<platforms.length;i++){
-        platforms[i].y += dy;
-      }
+      for(let i=0;i<platforms.length;i++) platforms[i].y += dy;
       score += Math.round(dy);
       scoreEl.textContent = score;
       while(platforms.length < 9) addPlatform(rand(-80, -20));
     }
 
     for(let p of platforms){
-      if(p.vx) { p.x += p.vx; if(p.x < 0 || p.x + p.w > W) p.vx *= -1; }
+      if(p.vx){ p.x += p.vx; if(p.x < 0 || p.x + p.w > W) p.vx *= -1; }
     }
 
     platforms = platforms.filter(p => p.y < H + 100);
 
-    if(player.y > H + 80){ running = false; }
+    if(player.y > H + 80) running = false;
   }
 
   function draw(){
     ctx.clearRect(0,0,W,H);
     const g = ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#071228'); g.addColorStop(1,'#071028');
-    ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+    g.addColorStop(0,'#071228');
+    g.addColorStop(1,'#071028');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
 
     ctx.globalAlpha = 0.06;
     for(let i=0;i<8;i++){
@@ -126,11 +128,9 @@
 
     ctx.fillStyle = '#ffd166';
     roundRect(ctx, player.x, player.y, player.w, player.h, 8, true, false);
-
     ctx.fillStyle = '#00000033';
     ctx.fillRect(player.x + 8, player.y + 12, 6, 6);
     ctx.fillRect(player.x + player.w - 14, player.y + 12, 6, 6);
-
     ctx.fillStyle = '#e6eef8';
     ctx.font = '600 18px Inter,Arial';
     ctx.fillText('Score: ' + score, 12, 28);
@@ -164,14 +164,20 @@
     if(stroke) ctx.stroke();
   }
 
-  function loop(){ if(running) update(); draw(); requestAnimationFrame(loop); }
-  loop(); reset();
+  function loop(){
+    if(running) update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  loop();
 
   window.addEventListener('keydown', e => {
     if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
     if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    if(e.key === ' '){ keys.jump = true; e.preventDefault(); }
-    if(e.key === 'r' || e.key === 'R'){ reset(); }
+    if(e.key === ' ') keys.jump = true;
+    if(e.key === 'r' || e.key === 'R') reset();
   });
 
   window.addEventListener('keyup', e => {
@@ -180,18 +186,21 @@
   });
 
   let touchId = null;
-  window.addEventListener('touchstart', (ev)=>{
+  window.addEventListener('touchstart', ev=>{
     for(const t of ev.changedTouches){
       touchId = t.identifier;
       const x = t.clientX - canvas.getBoundingClientRect().left;
-      if(x < W/2) keys.left = true; else keys.right = true;
+      if(x < W/2) keys.left = true;
+      else keys.right = true;
     }
-    ev.preventDefault();
   }, {passive:false});
 
-  window.addEventListener('touchend', (ev)=>{
-    keys.left=false; keys.right=false; touchId = null;
+  window.addEventListener('touchend', ev=>{
+    keys.left=false;
+    keys.right=false;
+    touchId=null;
   }, {passive:false});
   </script>
 </body>
 </html>
+
