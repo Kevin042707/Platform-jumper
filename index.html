@@ -29,13 +29,13 @@
       <div><button id="toggle-sound">Toggle Sound</button></div>
     </div>
     <div id="leaderboard" style="margin-top:8px"></div>
-    <footer>© 2025 Platform Jumper | Created by Kevin Cordova | Last updated: Nov 12, 2025</footer>
+    <footer>© 2025 Platform Jumper | Created by Kevin Cordova | Last updated: Nov 21, 2025</footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 
   <script>
-  const FIREBASE_DB_URL = ''; // <-- optional: online DB URL, else localStorage
+  const FIREBASE_DB_URL = '';
 
   const configGame = {
     type: Phaser.AUTO,
@@ -58,13 +58,11 @@
     platformsGroup = this.physics.add.staticGroup();
     createInitialPlatforms(this);
 
-    player = this.physics.add.sprite(200, 520, null).setDisplaySize(36,36);
-    player.body.setSize(36,36);
-    player.setCollideWorldBounds(false);
+    player = this.physics.add.existing(
+      this.add.rectangle(200, 520, 36, 36, 0xffd166)
+    );
+    player.body.setCollideWorldBounds(false);
     player.setBounce(0);
-
-    player.graphics = this.add.graphics();
-    renderPlayerGraphics(player.graphics);
 
     this.physics.add.collider(player, platformsGroup, onPlayerPlatform, null, this);
 
@@ -94,9 +92,7 @@
   function update(time, delta){
     const left = cursors.left.isDown; const right = cursors.right.isDown;
     const vx = 200 * speedBoost;
-    if(left) player.setVelocityX(-vx); else if(right) player.setVelocityX(vx); else player.setVelocityX(0);
-
-    renderPlayerGraphics(player.graphics);
+    if(left) player.body.setVelocityX(-vx); else if(right) player.body.setVelocityX(vx); else player.body.setVelocityX(0);
 
     platformsGroup.getChildren().forEach(p => {
       if(p.moving){ p.x += p.vx * delta/16; p.refreshBody(); if(p.x < p.minX || p.x > p.maxX) p.vx *= -1; }
@@ -166,15 +162,6 @@
 
   function onPlayerPlatform(ply, plat){
     if(ply.body.velocity.y > 0){ ply.setVelocityY(0); }
-  }
-
-  function renderPlayerGraphics(g){
-    g.clear();
-    g.fillStyle(0xffd166,1);
-    g.fillRect(player.x - 18, player.y - 18, 36, 36);
-    g.fillStyle(0x000000,0.2);
-    g.fillRect(player.x - 10, player.y - 6, 6,6);
-    g.fillRect(player.x + 4, player.y - 6, 6,6);
   }
 
   function updateScore(delta){
@@ -286,6 +273,7 @@
   </script>
 </body>
 </html>
+
 
 
 
