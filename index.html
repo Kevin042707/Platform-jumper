@@ -36,13 +36,14 @@
   const gravity = 0.55;
   const jumpVel = -12;
   const playerW = 36, playerH = 36;
+  const maxFall = 18;
 
   function reset(){
     player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
     platforms = [];
     score = 0;
     highY = player.y;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12});
+    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
     for(let i=0;i<7;i++) addPlatform(H - 160 - i*90);
     running = true;
     scoreEl.textContent = score;
@@ -53,13 +54,15 @@
   function addPlatform(y){
     const w = rand(60,120);
     const x = rand(0, W - w);
-    platforms.push({x,y,w,h:12, vx: Math.random()<0.2 ? rand(-0.6,0.6) : 0});
+    const vx = Math.random()<0.2 ? rand(-0.6,0.6) : 0;
+    platforms.push({x,y,w,h:12, vx});
   }
 
   function update(){
     player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
-    player.vx *= 0.92;
+    if(!keys.left && !keys.right) player.vx *= 0.9; else player.vx *= 0.97;
     player.vy += gravity;
+    player.vy = Math.min(player.vy, maxFall);
     player.x += player.vx; player.y += player.vy;
 
     if(player.x > W) player.x = -player.w;
@@ -78,30 +81,40 @@
       }
     }
 
-    if(keys.jump){
+    if(keys.jump && player.vy >= 0){
       for(let p of platforms){
         if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
           player.vy = jumpVel;
-          keys.jump=false;
           break;
         }
       }
     }
+    keys.jump = false;
 
     if(player.y < H/3){
       const dy = Math.min((H/3 - player.y)*0.2, 12);
       player.y += dy;
       for(let i=0;i<platforms.length;i++) platforms[i].y += dy;
-      score += Math.round(dy);
+      score += Math.min(Math.round(dy), 12);
       scoreEl.textContent = score;
       while(platforms.length < 9) addPlatform(rand(-80, -20));
     }
 
     for(let p of platforms){
-      if(p.vx){ p.x += p.vx; if(p.x < 0 || p.x + p.w > W) p.vx *= -1; }
+      if(p.vx){
+        p.x += p.vx;
+        if(p.x < 0) { p.x = 0; p.vx *= -1; }
+        if(p.x + p.w > W) { p.x = W - p.w; p.vx *= -1; }
+      }
+      if(player.y + player.h > p.y && player.y < p.y + p.h && player.x + player.w > p.x && player.x < p.x + p.w){
+        if(player.y + player.h - p.vy <= p.y + 6){
+          player.y = p.y - player.h;
+          player.vy = 0;
+        }
+      }
     }
 
-    platforms = platforms.filter(p => p.y < H + 100);
+    platforms = platforms.filter(p => p.y < H + 100 && p.y > -200);
 
     if(player.y > H + 80) running = false;
   }
@@ -203,6 +216,7 @@
   </script>
 </body>
 </html>
+
 
 
 
