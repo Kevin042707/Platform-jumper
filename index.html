@@ -35,7 +35,7 @@
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 
   <script>
-  const FIREBASE_DB_URL = '';
+  const FIREBASE_DB_URL = ''; // <-- optional: online DB URL, else localStorage
 
   const configGame = {
     type: Phaser.AUTO,
@@ -134,9 +134,7 @@
     scene.physics.add.existing(rect, true);
     rect.displayWidth = w; rect.moving = false; rect.isSafe = false;
 
-    if(Math.random() < 0.2){ 
-      createPowerUp(scene, x, yy - 18);
-    }
+    if(Math.random() < 0.2){ createPowerUp(scene, x, yy - 18); }
 
     if(Math.random() < Math.min(0.25, score/2000)) spawnMovingPlatform(scene, yy);
 
@@ -171,10 +169,18 @@
   }
 
   function renderPlayerGraphics(g){
-    g.clear(); g.fillStyle(0xffd166,1); g.fillRect(player.x - 18, player.y - 18, 36, 36); g.fillStyle(0x000000,0.2); g.fillRect(player.x - 10, player.y - 6, 6,6); g.fillRect(player.x + 4, player.y - 6, 6,6);
+    g.clear();
+    g.fillStyle(0xffd166,1);
+    g.fillRect(player.x - 18, player.y - 18, 36, 36);
+    g.fillStyle(0x000000,0.2);
+    g.fillRect(player.x - 10, player.y - 6, 6,6);
+    g.fillRect(player.x + 4, player.y - 6, 6,6);
   }
 
-  function updateScore(delta){ score += delta; scoreTextEl.textContent = score; }
+  function updateScore(delta){
+    score += delta;
+    scoreTextEl.textContent = score;
+  }
 
   let audioCtx, sfxGain, musicOsc;
   function setupAudio(scene){
@@ -182,20 +188,38 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.03; sfxGain.connect(audioCtx.destination);
       musicOsc = audioCtx.createOscillator();
-      const musicGain = audioCtx.createGain(); musicGain.gain.value = 0.0015; musicOsc.type = 'sine'; musicOsc.frequency.value = 220; musicOsc.connect(musicGain); musicGain.connect(audioCtx.destination);
+      const musicGain = audioCtx.createGain();
+      musicGain.gain.value = 0.0015;
+      musicOsc.type = 'sine';
+      musicOsc.frequency.value = 220;
+      musicOsc.connect(musicGain);
+      musicGain.connect(audioCtx.destination);
       musicOsc.start();
       toggleMusic(musicOn);
     }catch(e){ audioCtx = null; }
   }
 
-  function toggleMusic(on){ if(!audioCtx) return; try{ if(on){ audioCtx.resume(); } else { audioCtx.suspend(); } }catch(e){} }
+  function toggleMusic(on){
+    if(!audioCtx) return;
+    try{
+      if(on){ audioCtx.resume(); }
+      else { audioCtx.suspend(); }
+    }catch(e){}
+  }
 
-  function playSfx(type){ if(!audioCtx) return; const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type = 'square';
+  function playSfx(type){
+    if(!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'square';
     if(type==='jump'){ o.frequency.value = 880; g.gain.value = 0.02; }
     else if(type==='double'){ o.frequency.value = 660; g.gain.value = 0.02; }
     else if(type==='power'){ o.frequency.value = 440; g.gain.value = 0.03; }
     else if(type==='boost'){ o.frequency.value = 1200; g.gain.value = 0.03; }
-    o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.08);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.08);
   }
 
   function gameOver(scene){
@@ -204,7 +228,8 @@
   }
 
   function displayGameOver(){
-    const submitBtn = document.getElementById('submitScore'); submitBtn.disabled = false;
+    const submitBtn = document.getElementById('submitScore');
+    submitBtn.disabled = false;
     fetchLeaderboard();
   }
 
@@ -213,13 +238,25 @@
     const payload = { name, score, time: Date.now() };
     if(FIREBASE_DB_URL){
       try{
-        await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      }catch(e){ console.warn('Leaderboard submit failed', e); localStoreSubmit(payload); }
-    }else{ localStoreSubmit(payload); }
+        await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+      }catch(e){
+        localStoreSubmit(payload);
+      }
+    }else{
+      localStoreSubmit(payload);
+    }
     fetchLeaderboard();
   }
 
-  function localStoreSubmit(payload){ const arr = JSON.parse(localStorage.getItem('pj_scores')||'[]'); arr.push(payload); localStorage.setItem('pj_scores', JSON.stringify(arr)); }
+  function localStoreSubmit(payload){
+    const arr = JSON.parse(localStorage.getItem('pj_scores')||'[]');
+    arr.push(payload);
+    localStorage.setItem('pj_scores', JSON.stringify(arr));
+  }
 
   async function fetchLeaderboard(){
     let rows = [];
@@ -228,19 +265,28 @@
         const r = await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json');
         const data = await r.json();
         if(data){ Object.values(data).forEach(v=>rows.push(v)); }
-      }catch(e){ console.warn('fetch leaderboard failed', e); }
+      }catch(e){ }
     }else{
       rows = JSON.parse(localStorage.getItem('pj_scores')||'[]');
     }
+
     rows.sort((a,b)=>b.score - a.score);
     rows = rows.slice(0,10);
-    const el = document.getElementById('leaderboard'); el.innerHTML = '<strong>Leaderboard</strong><br/>' + (rows.length? rows.map((r,i)=>`${i+1}. ${escapeHtml(r.name)} — ${r.score}`).join('<br/>') : 'No scores yet');
+
+    const el = document.getElementById('leaderboard');
+    el.innerHTML =
+      '<strong>Leaderboard</strong><br/>' +
+      (rows.length ? rows.map((r,i)=>`${i+1}. ${escapeHtml(r.name)} — ${r.score}`).join('<br/>') : 'No scores yet');
   }
 
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
 
   </script>
 </body>
 </html>
+
+
 
 
