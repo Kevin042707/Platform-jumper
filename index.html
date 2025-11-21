@@ -13,7 +13,7 @@
 </head>
 <body>
   <div class="ui">Score: <span id="score">0</span></div>
-  <div class="controls">← → to move · Space to jump · R to restart</div>
+  <div class="controls">← → to move · Z to jump · X for boost · R to restart</div>
   <div id="game-container"></div>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
   <script>
@@ -22,121 +22,120 @@
       width: 400,
       height: 700,
       parent: 'game-container',
-      physics: {
-        default: 'arcade',
-        arcade: {
-          gravity: { y: 1000 },
-          debug: false
-        }
-      },
-      scene: {
-        preload: preload,
-        create: create,
-        update: update
-      }
+      physics: { default: 'arcade', arcade: { gravity: { y: 1000 }, debug: false } },
+      scene: { preload, create, update }
     };
 
     const game = new Phaser.Game(config);
 
-    let player;
-    let platforms;
-    let cursors;
-    let score = 0;
-    let scoreEl = document.getElementById('score');
-    let gameOverFlag = false;
+    let player, platforms, cursors, score = 0, scoreEl, canDoubleJump = false, hasDoubleJump = false, speedBoost = 1, boostTimer = 0, gameOverFlag = false;
 
-    const playerSize = 36;
+    function preload(){}
 
-    function preload() {}
-
-    function create() {
-      this.cameras.main.setBackgroundColor('#071228');
-
+    function create(){
+      scoreEl = document.getElementById('score');
       platforms = this.physics.add.staticGroup();
       createInitialPlatforms(this);
 
-      player = this.physics.add.sprite(200, 600, null).setDisplaySize(playerSize, playerSize);
-      player.setBounce(0);
+      player = this.physics.add.sprite(200, 600, null).setDisplaySize(36,36);
       player.setCollideWorldBounds(true);
-
+      player.setBounce(0);
       player.graphics = this.add.graphics();
       renderPlayer();
 
-      this.physics.add.collider(player, platforms);
+      this.physics.add.collider(player, platforms, () => { hasDoubleJump = canDoubleJump; });
 
-      cursors = this.input.keyboard.createCursorKeys();
+      cursors = this.input.keyboard.addKeys({ left: Phaser.Input.Keyboard.KeyCodes.LEFT, right: Phaser.Input.Keyboard.KeyCodes.RIGHT, jump: Phaser.Input.Keyboard.KeyCodes.Z, boost: Phaser.Input.Keyboard.KeyCodes.X });
       this.input.keyboard.on('keydown-R', () => restartGame(this));
 
-      this.physics.world.setBounds(0, 0, 400, 700);
+      this.time.addEvent({ delay: 1500, callback: () => spawnPlatform(this), loop: true });
     }
 
-    function update() {
-      if (gameOverFlag) return;
+    function update(){
+      if(gameOverFlag) return;
 
-      player.setVelocityX(0);
-      if (cursors.left.isDown) player.setVelocityX(-200);
-      else if (cursors.right.isDown) player.setVelocityX(200);
+      let vx = 200 * speedBoost;
+      if(cursors.left.isDown) player.setVelocityX(-vx);
+      else if(cursors.right.isDown) player.setVelocityX(vx);
+      else player.setVelocityX(0);
 
-      if (cursors.space.isDown && player.body.touching.down) {
-        player.setVelocityY(-500);
+      if(Phaser.Input.Keyboard.JustDown(cursors.jump)){
+        if(player.body.touching.down){ player.setVelocityY(-480); hasDoubleJump = true; }
+        else if(hasDoubleJump && canDoubleJump){ player.setVelocityY(-420); hasDoubleJump = false; }
       }
 
-      if (player.y < 300) {
-        let dy = 300 - player.y;
-        player.y += dy * 0.2;
-        platforms.getChildren().forEach(p => { p.y += dy * 0.2; p.refreshBody(); });
-        score += Math.round(dy * 0.2);
-        scoreEl.textContent = score;
-        while (platforms.getChildren().length < 9) spawnPlatform(this, Phaser.Math.Between(-80, -20));
+      if(Phaser.Input.Keyboard.JustDown(cursors.boost) && boostTimer<=0){
+        speedBoost = 1.8;
+        boostTimer = 180;
       }
 
-      platforms.getChildren().forEach(p => {
-        if (p.y > 800) p.destroy();
+      if(boostTimer>0){ boostTimer--; if(boostTimer<=0) speedBoost=1; }
+
+      platforms.getChildren().forEach(p=>{
+        if(p.moving){
+          p.x += p.vx;
+          if(p.x < 20 || p.x + p.displayWidth > 380) p.vx*=-1;
+          p.refreshBody();
+        }
       });
+
+      if(player.y < 300){
+        let dy = Math.min((300 - player.y) * 0.2, 10);
+        player.y += dy;
+        platforms.getChildren().forEach(p => { p.y += dy; p.refreshBody(); });
+        score += Math.round(dy);
+        scoreEl.textContent = score;
+        while(platforms.getChildren().length < 9) spawnPlatform(this, Phaser.Math.Between(-80,-20));
+      }
+
+      platforms.getChildren().forEach(p => { if(p.y > 800) p.destroy(); });
 
       renderPlayer();
 
-      if (player.y > 800) {
+      if(player.y > 800){
         gameOverFlag = true;
         this.add.text(100, 300, 'Game Over', { font: '26px Arial', fill: '#e6eef8' });
         this.add.text(100, 350, 'Press R to restart', { font: '16px Arial', fill: '#e6eef8' });
       }
     }
 
-    function createInitialPlatforms(scene) {
+    function createInitialPlatforms(scene){
       platforms.create(200, 680, null).setDisplaySize(100,12).refreshBody();
       for(let i=0;i<7;i++) spawnPlatform(scene, 600 - i*90);
     }
 
-    function spawnPlatform(scene, y) {
+    function spawnPlatform(scene, y){
       let w = Phaser.Math.Between(60,120);
       let x = Phaser.Math.Between(w/2, 400 - w/2);
       let p = scene.physics.add.staticSprite(x, y, null).setDisplaySize(w,12).refreshBody();
+      if(Math.random() < 0.2){
+        p.moving = true;
+        p.vx = Phaser.Math.FloatBetween(0.3,1.2)*(Math.random()<0.5?-1:1);
+      } else p.moving = false;
       platforms.add(p);
     }
 
-    function renderPlayer() {
+    function renderPlayer(){
       player.graphics.clear();
       player.graphics.fillStyle(0xffd166,1);
-      player.graphics.fillRect(player.x - playerSize/2, player.y - playerSize/2, playerSize, playerSize);
+      player.graphics.fillRect(player.x - 18, player.y - 18, 36,36);
       player.graphics.fillStyle(0x000000,0.2);
-      player.graphics.fillRect(player.x + 8 - playerSize/2, player.y + 12 - playerSize/2, 6,6);
-      player.graphics.fillRect(player.x + playerSize - 14 - playerSize/2, player.y + 12 - playerSize/2, 6,6);
+      player.graphics.fillRect(player.x + 8, player.y + 12, 6,6);
+      player.graphics.fillRect(player.x + 22, player.y + 12, 6,6);
     }
 
-    function restartGame(scene) {
-      score = 0;
-      scoreEl.textContent = score;
+    function restartGame(scene){
+      score = 0; scoreEl.textContent = score;
       gameOverFlag = false;
+      canDoubleJump = false; hasDoubleJump = false; speedBoost=1; boostTimer=0;
       platforms.clear(true,true);
       createInitialPlatforms(scene);
-      player.x = 200;
-      player.y = 600;
-      player.setVelocity(0,0);
+      player.x = 200; player.y = 600; player.setVelocity(0,0);
     }
   </script>
 </body>
 </html>
+
 
 
 
