@@ -53,7 +53,7 @@
   function addPlatform(prevY){
     const w = rand(60,120);
     const x = rand(0, W - w);
-    const vx = Math.random() < 0.2 ? rand(-0.6, 0.6) : 0;
+    const vx = Math.random() < 0.3 ? rand(-1,1) : 0;
     const maxGap = 110; 
     const minGap = 70;
     const y = prevY - rand(minGap, maxGap);
@@ -210,7 +210,6 @@
   </script>
 </body>
 </html>
-
 
 
 
