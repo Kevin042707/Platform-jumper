@@ -3,204 +3,244 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Platform Jumper</title>
+  <title>Platform Jumper (Phaser)</title>
   <style>
-    :root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-    body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
-    canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-    .ui{position:fixed;left:16px;top:16px;color:var(--text);font-weight:600}
-    .controls{position:fixed;right:16px;top:16px;color:var(--text);font-weight:500;font-size:14px}
-    footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
+    :root{--bg:#0f1724;--text:#e6eef8}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:#071228;color:var(--text)}
+    #game-container{width:420px;margin:24px auto;}
+    .ui{display:flex;justify-content:space-between;align-items:center;margin:8px 0;color:var(--text)}
+    button{background:#2b6cb0;border:0;padding:8px 12px;border-radius:8px;color:white;font-weight:600}
+    input{padding:6px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--text)}
+    footer{margin-top:12px;text-align:center;color:#98a2b3;font-size:13px}
   </style>
 </head>
 <body>
-  <div class="ui">Score: <span id="score">0</span></div>
-  <div class="controls">← → to move · Space to jump · R to restart</div>
-  <canvas id="game"></canvas>
-  <footer>Platform Jumper • Creator: Kevin Cordova • Last updated: Nov 12, 2025</footer>
+  <div id="game-container">
+    <div class="ui">
+      <div>Score: <span id="score">0</span></div>
+      <div>
+        <input id="name" placeholder="Name" maxlength="12" style="width:110px" />
+        <button id="submitScore">Submit</button>
+      </div>
+    </div>
+    <div id="phaser-game"></div>
+    <div class="ui">
+      <div>Controls: ← → to move · Z to jump · X to use boost</div>
+      <div><button id="toggle-sound">Toggle Sound</button></div>
+    </div>
+    <div id="leaderboard" style="margin-top:8px"></div>
+    <footer>© 2025 Platform Jumper | Created by Kevin Cordova | Last updated: Nov 12, 2025</footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 
   <script>
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const W = 400, H = 700;
-  canvas.width = W * DPR; canvas.height = H * DPR; canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-  ctx.scale(DPR, DPR);
+  const FIREBASE_DB_URL = '';
 
-  let keys = {left:false,right:false,jump:false};
-  let scoreEl = document.getElementById('score');
-  let running = true;
-  let player, platforms, score, highY;
+  const configGame = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 640,
+    parent: 'phaser-game',
+    backgroundColor: '#071228',
+    physics: { default: 'arcade', arcade: { gravity: { y: 1000 }, debug: false } },
+    scene: { preload, create, update }
+  };
 
-  const gravity = 0.55;
-  const jumpVel = -12;
-  const playerW = 36, playerH = 36;
+  let game = new Phaser.Game(configGame);
+  let cursors, player, platformsGroup, score = 0, scoreTextEl, canDoubleJump = false, hasDoubleJump = false, speedBoost = 1, boostTimer = 0, musicOn = true;
 
-  function reset(){
-    player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
-    platforms = [];
-    score = 0;
-    highY = player.y;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12});
-    for(let i=0;i<7;i++) addPlatform(H - 160 - i*90);
-    running = true;
-    scoreEl.textContent = score;
+  function preload(){ }
+
+  function create(){
+    this.cameras.main.setBackgroundColor('#071228');
+
+    platformsGroup = this.physics.add.staticGroup();
+    createInitialPlatforms(this);
+
+    player = this.physics.add.sprite(200, 520, null).setDisplaySize(36,36);
+    player.body.setSize(36,36);
+    player.setCollideWorldBounds(false);
+    player.setBounce(0);
+
+    player.graphics = this.add.graphics();
+    renderPlayerGraphics(player.graphics);
+
+    this.physics.add.collider(player, platformsGroup, onPlayerPlatform, null, this);
+
+    cursors = this.input.keyboard.addKeys({left: Phaser.Input.Keyboard.KeyCodes.LEFT, right: Phaser.Input.Keyboard.KeyCodes.RIGHT, jump: Phaser.Input.Keyboard.KeyCodes.Z, boost: Phaser.Input.Keyboard.KeyCodes.X});
+
+    scoreTextEl = document.getElementById('score');
+    updateScore(0);
+
+    this.time.addEvent({ delay: 1500, callback: () => spawnPlatform(this), loop: true });
+
+    this.soundVolume = 0.6;
+    setupAudio(this);
+
+    this.input.keyboard.on('keydown-Z', ()=>{
+      if(player.body.touching.down){ player.setVelocityY(-480); hasDoubleJump = true; playSfx('jump'); }
+      else if(hasDoubleJump && canDoubleJump){ player.setVelocityY(-420); hasDoubleJump = false; playSfx('double'); }
+    });
+
+    this.input.keyboard.on('keydown-X', ()=>{ if(speedBoost === 1 && boostTimer<=0){ speedBoost = 1.8; boostTimer = 180; playSfx('boost'); } });
+
+    document.getElementById('submitScore').addEventListener('click', submitScoreHandler);
+    document.getElementById('toggle-sound').addEventListener('click', ()=>{ musicOn = !musicOn; toggleMusic(musicOn); });
+
+    fetchLeaderboard();
   }
 
-  function rand(min,max){return Math.random()*(max-min)+min}
+  function update(time, delta){
+    const left = cursors.left.isDown; const right = cursors.right.isDown;
+    const vx = 200 * speedBoost;
+    if(left) player.setVelocityX(-vx); else if(right) player.setVelocityX(vx); else player.setVelocityX(0);
 
-  function addPlatform(y){
-    const w = rand(60,120);
-    const x = rand(0, W - w);
-    platforms.push({x,y,w,h:12, vx: Math.random()<0.2 ? rand(-0.6,0.6) : 0});
-  }
+    renderPlayerGraphics(player.graphics);
 
-  function update(){
-    player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
-    player.vx *= 0.92;
-    player.vy += gravity;
-    player.x += player.vx; player.y += player.vy;
+    platformsGroup.getChildren().forEach(p => {
+      if(p.moving){ p.x += p.vx * delta/16; p.refreshBody(); if(p.x < p.minX || p.x > p.maxX) p.vx *= -1; }
+      if(p.y > 720) { p.destroy(); }
+    });
 
-    if(player.x > W) player.x = -player.w;
-    if(player.x + player.w < 0) player.x = W;
-
-    if(player.vy > 0){
-      for(let p of platforms){
-        if(player.x + player.w > p.x && player.x < p.x + p.w){
-          if(player.y + player.h <= p.y + player.vy && player.y + player.h + player.vy >= p.y){
-            if(player.y + player.h <= p.y + 6){
-              player.y = p.y - player.h;
-              player.vy = 0;
-            }
-          }
-        }
-      }
-    }
-
-    if(keys.jump){
-      for(let p of platforms){
-        if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
-          player.vy = jumpVel;
-          keys.jump=false;
-          break;
-        }
-      }
-    }
-
-    if(player.y < H/3){
-      const dy = Math.min((H/3 - player.y)*0.2, 12);
+    if(player.y < 220){
+      const dy = Math.min((220 - player.y) * 0.2, 10);
       player.y += dy;
-      for(let i=0;i<platforms.length;i++) platforms[i].y += dy;
-      score += Math.round(dy);
-      scoreEl.textContent = score;
-      while(platforms.length < 9) addPlatform(rand(-80, -20));
+      platformsGroup.getChildren().forEach(p => { p.y += dy; p.refreshBody(); });
+      updateScore(Math.round(dy));
     }
 
-    for(let p of platforms){
-      if(p.vx){ p.x += p.vx; if(p.x < 0 || p.x + p.w > W) p.vx *= -1; }
-    }
+    if(score > 500 && Math.random() < 0.01) spawnMovingPlatform(this);
 
-    platforms = platforms.filter(p => p.y < H + 100);
+    if(boostTimer>0){ boostTimer -= 1; if(boostTimer<=0){ speedBoost = 1; } }
 
-    if(player.y > H + 80) running = false;
+    platformsGroup.getChildren().forEach(p => { if(!p.isSafe) p.displayWidth = Math.max(40, p.displayWidth - score*0.00005); });
+
+    if(player.y > 720){ gameOver(this); }
   }
 
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    const g = ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#071228');
-    g.addColorStop(1,'#071028');
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,W,H);
-
-    ctx.globalAlpha = 0.06;
-    for(let i=0;i<8;i++){
-      ctx.fillStyle = '#fff';
-      ctx.fillRect((i*70 + score*0.4)% (W+120) - 60, 40 + (i%3)*20, 120, 20);
-    }
-    ctx.globalAlpha = 1;
-
-    for(let p of platforms){
-      ctx.fillStyle = '#63ace5';
-      roundRect(ctx, p.x, p.y, p.w, p.h, 6, true, false);
-    }
-
-    ctx.fillStyle = '#ffd166';
-    roundRect(ctx, player.x, player.y, player.w, player.h, 8, true, false);
-    ctx.fillStyle = '#00000033';
-    ctx.fillRect(player.x + 8, player.y + 12, 6, 6);
-    ctx.fillRect(player.x + player.w - 14, player.y + 12, 6, 6);
-    ctx.fillStyle = '#e6eef8';
-    ctx.font = '600 18px Inter,Arial';
-    ctx.fillText('Score: ' + score, 12, 28);
-
-    if(!running){
-      ctx.fillStyle = 'rgba(2,6,23,0.7)';
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = '#e6eef8';
-      ctx.font = '700 26px Arial';
-      ctx.fillText('Game Over', W/2 - 70, H/2 - 10);
-      ctx.font = '500 14px Arial';
-      ctx.fillText('Press R to restart', W/2 - 68, H/2 + 18);
-    }
+  function createInitialPlatforms(scene){
+    const base = scene.add.rectangle(200, 600, 120, 12, 0x63ace5);
+    scene.physics.add.existing(base, true);
+    platformsGroup.add(base);
+    for(let i=0;i<7;i++) spawnPlatform(scene, 520 - i*80);
   }
 
-  function roundRect(ctx,x,y,w,h,r,fill,stroke){
-    if(typeof r === 'undefined') r=4;
-    if(typeof r === 'number') r={tl:r,tr:r,br:r,bl:r};
-    ctx.beginPath();
-    ctx.moveTo(x + r.tl, y);
-    ctx.lineTo(x + w - r.tr, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-    ctx.lineTo(x + w, y + h - r.br);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-    ctx.lineTo(x + r.bl, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-    ctx.lineTo(x, y + r.tl);
-    ctx.quadraticCurveTo(x, y, x + r.tl, y);
-    ctx.closePath();
-    if(fill) ctx.fill();
-    if(stroke) ctx.stroke();
-  }
+  function spawnPlatform(scene, y = null){
+    const yy = y !== null ? y : -20;
+    const w = Phaser.Math.Between(60, 120);
+    const x = Phaser.Math.Between(w/2, 400 - w/2);
+    const rect = scene.add.rectangle(x, yy, w, 12, 0x63ace5);
+    scene.physics.add.existing(rect, true);
+    rect.displayWidth = w; rect.moving = false; rect.isSafe = false;
 
-  function loop(){
-    if(running) update();
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  reset();
-  loop();
-
-  window.addEventListener('keydown', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    if(e.key === ' ') keys.jump = true;
-    if(e.key === 'r' || e.key === 'R') reset();
-  });
-
-  window.addEventListener('keyup', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-  });
-
-  let touchId = null;
-  window.addEventListener('touchstart', ev=>{
-    for(const t of ev.changedTouches){
-      touchId = t.identifier;
-      const x = t.clientX - canvas.getBoundingClientRect().left;
-      if(x < W/2) keys.left = true;
-      else keys.right = true;
+    if(Math.random() < 0.2){ 
+      createPowerUp(scene, x, yy - 18);
     }
-  }, {passive:false});
 
-  window.addEventListener('touchend', ev=>{
-    keys.left=false;
-    keys.right=false;
-    touchId=null;
-  }, {passive:false});
+    if(Math.random() < Math.min(0.25, score/2000)) spawnMovingPlatform(scene, yy);
+
+    platformsGroup.add(rect);
+  }
+
+  function spawnMovingPlatform(scene, y = -20){
+    const w = Phaser.Math.Between(70, 120);
+    const x = Phaser.Math.Between(w/2, 400 - w/2);
+    const rect = scene.add.rectangle(x, y, w, 12, 0x63ace5);
+    scene.physics.add.existing(rect, true);
+    rect.displayWidth = w; rect.moving = true; rect.vx = Phaser.Math.FloatBetween(0.3, 1.2) * (Math.random()<0.5?-1:1); rect.minX = 20; rect.maxX = 380; rect.isSafe = false;
+    platformsGroup.add(rect);
+  }
+
+  function createPowerUp(scene, x, y){
+    const type = Math.random() < 0.6 ? 'double' : 'speed';
+    const circle = scene.add.circle(x, y, 8, type === 'double' ? 0xffd166 : 0x90ee90);
+    scene.physics.add.existing(circle);
+    circle.body.setAllowGravity(false);
+    circle.type = type;
+    scene.physics.add.overlap(player, circle, ()=>{ collectPowerUp(circle); circle.destroy(); }, null, scene);
+  }
+
+  function collectPowerUp(obj){
+    if(obj.type === 'double'){ canDoubleJump = true; playSfx('power'); }
+    else if(obj.type === 'speed'){ speedBoost = 1.6; boostTimer = 300; playSfx('power'); }
+  }
+
+  function onPlayerPlatform(ply, plat){
+    if(ply.body.velocity.y > 0){ ply.setVelocityY(0); }
+  }
+
+  function renderPlayerGraphics(g){
+    g.clear(); g.fillStyle(0xffd166,1); g.fillRect(player.x - 18, player.y - 18, 36, 36); g.fillStyle(0x000000,0.2); g.fillRect(player.x - 10, player.y - 6, 6,6); g.fillRect(player.x + 4, player.y - 6, 6,6);
+  }
+
+  function updateScore(delta){ score += delta; scoreTextEl.textContent = score; }
+
+  let audioCtx, sfxGain, musicOsc;
+  function setupAudio(scene){
+    try{
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.03; sfxGain.connect(audioCtx.destination);
+      musicOsc = audioCtx.createOscillator();
+      const musicGain = audioCtx.createGain(); musicGain.gain.value = 0.0015; musicOsc.type = 'sine'; musicOsc.frequency.value = 220; musicOsc.connect(musicGain); musicGain.connect(audioCtx.destination);
+      musicOsc.start();
+      toggleMusic(musicOn);
+    }catch(e){ audioCtx = null; }
+  }
+
+  function toggleMusic(on){ if(!audioCtx) return; try{ if(on){ audioCtx.resume(); } else { audioCtx.suspend(); } }catch(e){} }
+
+  function playSfx(type){ if(!audioCtx) return; const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type = 'square';
+    if(type==='jump'){ o.frequency.value = 880; g.gain.value = 0.02; }
+    else if(type==='double'){ o.frequency.value = 660; g.gain.value = 0.02; }
+    else if(type==='power'){ o.frequency.value = 440; g.gain.value = 0.03; }
+    else if(type==='boost'){ o.frequency.value = 1200; g.gain.value = 0.03; }
+    o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.08);
+  }
+
+  function gameOver(scene){
+    scene.physics.pause();
+    displayGameOver();
+  }
+
+  function displayGameOver(){
+    const submitBtn = document.getElementById('submitScore'); submitBtn.disabled = false;
+    fetchLeaderboard();
+  }
+
+  async function submitScoreHandler(){
+    const name = (document.getElementById('name').value || 'Anon').substring(0,12);
+    const payload = { name, score, time: Date.now() };
+    if(FIREBASE_DB_URL){
+      try{
+        await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+      }catch(e){ console.warn('Leaderboard submit failed', e); localStoreSubmit(payload); }
+    }else{ localStoreSubmit(payload); }
+    fetchLeaderboard();
+  }
+
+  function localStoreSubmit(payload){ const arr = JSON.parse(localStorage.getItem('pj_scores')||'[]'); arr.push(payload); localStorage.setItem('pj_scores', JSON.stringify(arr)); }
+
+  async function fetchLeaderboard(){
+    let rows = [];
+    if(FIREBASE_DB_URL){
+      try{
+        const r = await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json');
+        const data = await r.json();
+        if(data){ Object.values(data).forEach(v=>rows.push(v)); }
+      }catch(e){ console.warn('fetch leaderboard failed', e); }
+    }else{
+      rows = JSON.parse(localStorage.getItem('pj_scores')||'[]');
+    }
+    rows.sort((a,b)=>b.score - a.score);
+    rows = rows.slice(0,10);
+    const el = document.getElementById('leaderboard'); el.innerHTML = '<strong>Leaderboard</strong><br/>' + (rows.length? rows.map((r,i)=>`${i+1}. ${escapeHtml(r.name)} — ${r.score}`).join('<br/>') : 'No scores yet');
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
   </script>
 </body>
 </html>
+
 
