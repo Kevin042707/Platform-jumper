@@ -18,25 +18,19 @@
   <div id="game-container">
     <div class="ui">
       <div>Score: <span id="score">0</span></div>
-      <div>
-        <input id="name" placeholder="Name" maxlength="12" style="width:110px" />
-        <button id="submitScore">Submit</button>
-      </div>
+      <div><button id="toggle-sound">Toggle Sound</button></div>
     </div>
     <div id="phaser-game"></div>
     <div class="ui">
-      <div>Controls: ← → to move · Z to jump · X to use boost</div>
-      <div><button id="toggle-sound">Toggle Sound</button></div>
+      <div>Controls: ← → to move · Z to jump · X to boost</div>
     </div>
-    <div id="leaderboard" style="margin-top:8px"></div>
-    <footer>© 2025 Platform Jumper | Created by Kevin Cordova | Last updated: Nov 21, 2025</footer>
+
+    <footer>© 2025 Platform Jumper | Created by Kevin Cordova</footer>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 
   <script>
-  const FIREBASE_DB_URL = '';
-
   const configGame = {
     type: Phaser.AUTO,
     width: 400,
@@ -48,7 +42,8 @@
   };
 
   let game = new Phaser.Game(configGame);
-  let cursors, player, platformsGroup, score = 0, scoreTextEl, canDoubleJump = false, hasDoubleJump = false, speedBoost = 1, boostTimer = 0, musicOn = true;
+  let cursors, player, platformsGroup, score = 0, scoreTextEl;
+  let canDoubleJump = false, hasDoubleJump = false, speedBoost = 1, boostTimer = 0, musicOn = true;
 
   function preload(){ }
 
@@ -58,18 +53,23 @@
     platformsGroup = this.physics.add.staticGroup();
     createInitialPlatforms(this);
 
-    player = this.physics.add.existing(
-      this.add.rectangle(200, 520, 36, 36, 0xffd166)
-    );
+    player = this.add.rectangle(200, 520, 36, 36, 0xffd166);
+    this.physics.add.existing(player);
+    player.body.setSize(36,36);
     player.body.setCollideWorldBounds(false);
-    player.setBounce(0);
+    player.setBounce?.(0);
 
     this.physics.add.collider(player, platformsGroup, onPlayerPlatform, null, this);
 
-    cursors = this.input.keyboard.addKeys({left: Phaser.Input.Keyboard.KeyCodes.LEFT, right: Phaser.Input.Keyboard.KeyCodes.RIGHT, jump: Phaser.Input.Keyboard.KeyCodes.Z, boost: Phaser.Input.Keyboard.KeyCodes.X});
+    cursors = this.input.keyboard.addKeys({
+      left: Phaser.Input.Keyboard.KeyCodes.LEFT,
+      right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
+      jump: Phaser.Input.Keyboard.KeyCodes.Z,
+      boost: Phaser.Input.Keyboard.KeyCodes.X
+    });
 
     scoreTextEl = document.getElementById('score');
-    updateScore(0);
+    scoreTextEl.textContent = score;
 
     this.time.addEvent({ delay: 1500, callback: () => spawnPlatform(this), loop: true });
 
@@ -77,42 +77,71 @@
     setupAudio(this);
 
     this.input.keyboard.on('keydown-Z', ()=>{
-      if(player.body.touching.down){ player.setVelocityY(-480); hasDoubleJump = true; playSfx('jump'); }
-      else if(hasDoubleJump && canDoubleJump){ player.setVelocityY(-420); hasDoubleJump = false; playSfx('double'); }
+      if(player.body.touching.down){
+        player.body.setVelocityY(-480);
+        hasDoubleJump = true;
+        playSfx('jump');
+      } else if(hasDoubleJump && canDoubleJump){
+        player.body.setVelocityY(-420);
+        hasDoubleJump = false;
+        playSfx('double');
+      }
     });
 
-    this.input.keyboard.on('keydown-X', ()=>{ if(speedBoost === 1 && boostTimer<=0){ speedBoost = 1.8; boostTimer = 180; playSfx('boost'); } });
+    this.input.keyboard.on('keydown-X', ()=>{
+      if(speedBoost === 1 && boostTimer<=0){
+        speedBoost = 1.8;
+        boostTimer = 180;
+        playSfx('boost');
+      }
+    });
 
-    document.getElementById('submitScore').addEventListener('click', submitScoreHandler);
-    document.getElementById('toggle-sound').addEventListener('click', ()=>{ musicOn = !musicOn; toggleMusic(musicOn); });
-
-    fetchLeaderboard();
+    document.getElementById('toggle-sound').addEventListener('click', ()=>{
+      musicOn = !musicOn;
+      toggleMusic(musicOn);
+    });
   }
 
   function update(time, delta){
-    const left = cursors.left.isDown; const right = cursors.right.isDown;
+    const left = cursors.left.isDown;
+    const right = cursors.right.isDown;
     const vx = 200 * speedBoost;
-    if(left) player.body.setVelocityX(-vx); else if(right) player.body.setVelocityX(vx); else player.body.setVelocityX(0);
+
+    if(left) player.body.setVelocityX(-vx);
+    else if(right) player.body.setVelocityX(vx);
+    else player.body.setVelocityX(0);
 
     platformsGroup.getChildren().forEach(p => {
-      if(p.moving){ p.x += p.vx * delta/16; p.refreshBody(); if(p.x < p.minX || p.x > p.maxX) p.vx *= -1; }
-      if(p.y > 720) { p.destroy(); }
+      if(p.moving){
+        p.x += p.vx * delta/16;
+        p.refreshBody();
+        if(p.x < p.minX || p.x > p.maxX) p.vx *= -1;
+      }
+      if(p.y > 720) p.destroy();
     });
 
     if(player.y < 220){
       const dy = Math.min((220 - player.y) * 0.2, 10);
       player.y += dy;
-      platformsGroup.getChildren().forEach(p => { p.y += dy; p.refreshBody(); });
-      updateScore(Math.round(dy));
+      platformsGroup.getChildren().forEach(p => {
+        p.y += dy;
+        p.refreshBody();
+      });
+      addScore(Math.round(dy));
     }
 
     if(score > 500 && Math.random() < 0.01) spawnMovingPlatform(this);
 
-    if(boostTimer>0){ boostTimer -= 1; if(boostTimer<=0){ speedBoost = 1; } }
+    if(boostTimer>0){
+      boostTimer -= 1;
+      if(boostTimer<=0) speedBoost = 1;
+    }
 
-    platformsGroup.getChildren().forEach(p => { if(!p.isSafe) p.displayWidth = Math.max(40, p.displayWidth - score*0.00005); });
+    platformsGroup.getChildren().forEach(p => {
+      p.displayWidth = Math.max(40, p.displayWidth - score*0.00005);
+    });
 
-    if(player.y > 720){ gameOver(this); }
+    if(player.y > 720) this.physics.pause();
   }
 
   function createInitialPlatforms(scene){
@@ -128,12 +157,8 @@
     const x = Phaser.Math.Between(w/2, 400 - w/2);
     const rect = scene.add.rectangle(x, yy, w, 12, 0x63ace5);
     scene.physics.add.existing(rect, true);
-    rect.displayWidth = w; rect.moving = false; rect.isSafe = false;
-
-    if(Math.random() < 0.2){ createPowerUp(scene, x, yy - 18); }
-
-    if(Math.random() < Math.min(0.25, score/2000)) spawnMovingPlatform(scene, yy);
-
+    rect.displayWidth = w;
+    rect.moving = false;
     platformsGroup.add(rect);
   }
 
@@ -142,38 +167,31 @@
     const x = Phaser.Math.Between(w/2, 400 - w/2);
     const rect = scene.add.rectangle(x, y, w, 12, 0x63ace5);
     scene.physics.add.existing(rect, true);
-    rect.displayWidth = w; rect.moving = true; rect.vx = Phaser.Math.FloatBetween(0.3, 1.2) * (Math.random()<0.5?-1:1); rect.minX = 20; rect.maxX = 380; rect.isSafe = false;
+    rect.displayWidth = w;
+    rect.moving = true;
+    rect.vx = Phaser.Math.FloatBetween(0.3, 1.2) * (Math.random()<0.5?-1:1);
+    rect.minX = 20;
+    rect.maxX = 380;
     platformsGroup.add(rect);
   }
 
-  function createPowerUp(scene, x, y){
-    const type = Math.random() < 0.6 ? 'double' : 'speed';
-    const circle = scene.add.circle(x, y, 8, type === 'double' ? 0xffd166 : 0x90ee90);
-    scene.physics.add.existing(circle);
-    circle.body.setAllowGravity(false);
-    circle.type = type;
-    scene.physics.add.overlap(player, circle, ()=>{ collectPowerUp(circle); circle.destroy(); }, null, scene);
-  }
-
-  function collectPowerUp(obj){
-    if(obj.type === 'double'){ canDoubleJump = true; playSfx('power'); }
-    else if(obj.type === 'speed'){ speedBoost = 1.6; boostTimer = 300; playSfx('power'); }
-  }
-
   function onPlayerPlatform(ply, plat){
-    if(ply.body.velocity.y > 0){ ply.setVelocityY(0); }
+    if(ply.body.velocity.y > 0) ply.body.setVelocityY(0);
   }
 
-  function updateScore(delta){
-    score += delta;
+  function addScore(n){
+    score += n;
     scoreTextEl.textContent = score;
   }
 
   let audioCtx, sfxGain, musicOsc;
-  function setupAudio(scene){
+  function setupAudio(){
     try{
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      sfxGain = audioCtx.createGain(); sfxGain.gain.value = 0.03; sfxGain.connect(audioCtx.destination);
+      sfxGain = audioCtx.createGain();
+      sfxGain.gain.value = 0.03;
+      sfxGain.connect(audioCtx.destination);
+
       musicOsc = audioCtx.createOscillator();
       const musicGain = audioCtx.createGain();
       musicGain.gain.value = 0.0015;
@@ -188,10 +206,8 @@
 
   function toggleMusic(on){
     if(!audioCtx) return;
-    try{
-      if(on){ audioCtx.resume(); }
-      else { audioCtx.suspend(); }
-    }catch(e){}
+    if(on) audioCtx.resume();
+    else audioCtx.suspend();
   }
 
   function playSfx(type){
@@ -199,80 +215,21 @@
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     o.type = 'square';
+
     if(type==='jump'){ o.frequency.value = 880; g.gain.value = 0.02; }
     else if(type==='double'){ o.frequency.value = 660; g.gain.value = 0.02; }
     else if(type==='power'){ o.frequency.value = 440; g.gain.value = 0.03; }
     else if(type==='boost'){ o.frequency.value = 1200; g.gain.value = 0.03; }
+
     o.connect(g);
     g.connect(audioCtx.destination);
     o.start();
     o.stop(audioCtx.currentTime + 0.08);
   }
-
-  function gameOver(scene){
-    scene.physics.pause();
-    displayGameOver();
-  }
-
-  function displayGameOver(){
-    const submitBtn = document.getElementById('submitScore');
-    submitBtn.disabled = false;
-    fetchLeaderboard();
-  }
-
-  async function submitScoreHandler(){
-    const name = (document.getElementById('name').value || 'Anon').substring(0,12);
-    const payload = { name, score, time: Date.now() };
-    if(FIREBASE_DB_URL){
-      try{
-        await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-      }catch(e){
-        localStoreSubmit(payload);
-      }
-    }else{
-      localStoreSubmit(payload);
-    }
-    fetchLeaderboard();
-  }
-
-  function localStoreSubmit(payload){
-    const arr = JSON.parse(localStorage.getItem('pj_scores')||'[]');
-    arr.push(payload);
-    localStorage.setItem('pj_scores', JSON.stringify(arr));
-  }
-
-  async function fetchLeaderboard(){
-    let rows = [];
-    if(FIREBASE_DB_URL){
-      try{
-        const r = await fetch(FIREBASE_DB_URL.replace(/\/+$/,'') + '/scores.json');
-        const data = await r.json();
-        if(data){ Object.values(data).forEach(v=>rows.push(v)); }
-      }catch(e){ }
-    }else{
-      rows = JSON.parse(localStorage.getItem('pj_scores')||'[]');
-    }
-
-    rows.sort((a,b)=>b.score - a.score);
-    rows = rows.slice(0,10);
-
-    const el = document.getElementById('leaderboard');
-    el.innerHTML =
-      '<strong>Leaderboard</strong><br/>' +
-      (rows.length ? rows.map((r,i)=>`${i+1}. ${escapeHtml(r.name)} — ${r.score}`).join('<br/>') : 'No scores yet');
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-  }
-
   </script>
 </body>
 </html>
+
 
 
 
