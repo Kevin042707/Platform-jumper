@@ -1,219 +1,98 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Platform Jumper</title>
-  <style>
-    :root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
-    body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
-    canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
-    .ui{position:fixed;left:16px;top:16px;color:var(--text);font-weight:600}
-    .controls{position:fixed;right:16px;top:16px;color:var(--text);font-weight:500;font-size:14px}
-    footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Platform Jumper</title>
+<style>
+:root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8;--power:#ff4d7a}
+html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+.ui{position:fixed;left:16px;top:16px;color:var(--text);font-weight:600}
+.controls{position:fixed;right:16px;top:16px;color:var(--text);font-weight:500;font-size:14px}
+footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
+</style>
 </head>
 <body>
-  <div class="ui">Score: <span id="score">0</span></div>
-  <div class="controls">← → to move · Space to jump · R to restart</div>
-  <canvas id="game"></canvas>
-  <footer>Platform Jumper • Creator: Kevin Cordova • Last updated: Nov 12, 2025</footer>
+<div class="ui">Score: <span id="score">0</span></div>
+<div class="controls">← → to move · Space to jump · R to restart</div>
+<canvas id="game"></canvas>
+<footer>Platform Jumper • Creator: Kevin Cordova • Last updated: Nov 12, 2025</footer>
 
-  <script>
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const W = 400, H = 700;
-  canvas.width = W * DPR; canvas.height = H * DPR; canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-  ctx.scale(DPR, DPR);
 
-  let keys = {left:false,right:false,jump:false};
-  let scoreEl = document.getElementById('score');
-  let running = true;
-  let player, platforms, score;
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const W = 400, H = 700;
+canvas.width = W * DPR; canvas.height = H * DPR; canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+ctx.scale(DPR, DPR);
 
-  const gravity = 0.55;
-  const jumpVel = -12;
-  const playerW = 36, playerH = 36;
-  const maxFall = 18;
 
-  function reset(){
-    player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
-    platforms = [];
-    score = 0;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
-    for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
-    running = true;
-    scoreEl.textContent = score;
-  }
+let keys = {left:false,right:false,jump:false};
+let scoreEl = document.getElementById('score');
+let running = true;
+let player, platforms, score;
+let powerups = [];
+let hasDoubleJump = false;
+let canDoubleJump = false;
 
-  function rand(min,max){return Math.random()*(max-min)+min}
 
-  function addPlatform(prevY){
-    const w = rand(60,120);
-    const x = rand(0, W - w);
-    let vx = 0;
-    if(Math.random() < 0.3){ 
-      const speed = rand(0.5, 2); 
-      vx = Math.random() < 0.5 ? -speed : speed;
-    }
-    const maxGap = 110; 
-    const minGap = 70;
-    const y = prevY - rand(minGap, maxGap);
-    platforms.push({x, y, w, h:12, vx});
-  }
+const gravity = 0.55;
+const jumpVel = -12;
+const playerW = 36, playerH = 36;
+const maxFall = 18;
 
-  function update(){
-    player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
-    player.vx *= (!keys.left && !keys.right) ? 0.9 : 0.97;
-    player.vy += gravity;
-    player.vy = Math.min(player.vy, maxFall);
-    player.x += player.vx; player.y += player.vy;
 
-    if(player.x > W) player.x = -player.w;
-    if(player.x + player.w < 0) player.x = W;
+function reset(){
+player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
+platforms = [];
+powerups = [];
+score = 0;
+hasDoubleJump = false;
+canDoubleJump = false;
+platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
+for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
+running = true;
+scoreEl.textContent = score;
+}
 
-    if(player.vy > 0){
-      for(let p of platforms){
-        if(player.x + player.w > p.x && player.x < p.x + p.w){
-          if(player.y + player.h <= p.y + player.vy && player.y + player.h + player.vy >= p.y){
-            player.y = p.y - player.h;
-            player.vy = 0;
-          }
-        }
-      }
-    }
 
-    if(keys.jump && player.vy >= 0){
-      for(let p of platforms){
-        if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
-          player.vy = jumpVel;
-          break;
-        }
-      }
-    }
-    keys.jump = false;
+function rand(min,max){return Math.random()*(max-min)+min}
 
-    if(player.y < H/3){
-      const dy = Math.min((H/3 - player.y)*0.2, 12);
-      player.y += dy;
-      for(let i=0;i<platforms.length;i++) platforms[i].y += dy;
-      score += Math.min(Math.round(dy), 12);
-      scoreEl.textContent = score;
-      while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
-    }
 
-    for(let p of platforms){
-      if(p.vx){
-        p.x += p.vx;
-        if(p.x < 0) { p.x = 0; p.vx *= -1; }
-        if(p.x + p.w > W) { p.x = W - p.w; p.vx *= -1; }
-      }
-    }
+function addPlatform(prevY){
+const w = rand(60,120);
+const x = rand(0, W - w);
+let vx = 0;
+if(Math.random() < 0.3){
+const speed = rand(0.5, 2);
+vx = Math.random() < 0.5 ? -speed : speed;
+}
+const maxGap = 110;
+const minGap = 70;
+const y = prevY - rand(minGap, maxGap);
+const p = {x, y, w, h:12, vx};
+platforms.push(p);
 
-    platforms = platforms.filter(p => p.y < H + 50);
 
-    if(player.y > H + 80) running = false;
-  }
+if(Math.random() < 0.15){
+powerups.push({x: x + w/2 - 10, y: y - 20, size: 18});
+}
+}
 
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    const g = ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#071228');
-    g.addColorStop(1,'#071028');
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,W,H);
 
-    ctx.globalAlpha = 0.06;
-    for(let i=0;i<8;i++){
-      ctx.fillStyle = '#fff';
-      ctx.fillRect((i*70 + score*0.4)% (W+120) - 60, 40 + (i%3)*20, 120, 20);
-    }
-    ctx.globalAlpha = 1;
+function update(){
+player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
+player.vx *= (!keys.left && !keys.right) ? 0.9 : 0.97;
+player.vy += gravity;
+player.vy = Math.min(player.vy, maxFall);
+player.x += player.vx; player.y += player.vy;
 
-    for(let p of platforms){
-      ctx.fillStyle = '#63ace5';
-      roundRect(ctx, p.x, p.y, p.w, p.h, 6, true, false);
-    }
 
-    ctx.fillStyle = '#ffd166';
-    roundRect(ctx, player.x, player.y, player.w, player.h, 8, true, false);
-    ctx.fillStyle = '#00000033';
-    ctx.fillRect(player.x + 8, player.y + 12, 6, 6);
-    ctx.fillRect(player.x + player.w - 14, player.y + 12, 6, 6);
-    ctx.fillStyle = '#e6eef8';
-    ctx.font = '600 18px Inter,Arial';
-    ctx.fillText('Score: ' + score, 12, 28);
-
-    if(!running){
-      ctx.fillStyle = 'rgba(2,6,23,0.7)';
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = '#e6eef8';
-      ctx.font = '700 26px Arial';
-      ctx.fillText('Game Over', W/2 - 70, H/2 - 10);
-      ctx.font = '500 14px Arial';
-      ctx.fillText('Press R to restart', W/2 - 68, H/2 + 18);
-    }
-  }
-
-  function roundRect(ctx,x,y,w,h,r,fill,stroke){
-    if(typeof r === 'undefined') r=4;
-    if(typeof r === 'number') r={tl:r,tr:r,br:r,bl:r};
-    ctx.beginPath();
-    ctx.moveTo(x + r.tl, y);
-    ctx.lineTo(x + w - r.tr, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-    ctx.lineTo(x + w, y + h - r.br);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-    ctx.lineTo(x + r.bl, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-    ctx.lineTo(x, y + r.tl);
-    ctx.quadraticCurveTo(x, y, x + r.tl, y);
-    ctx.closePath();
-    if(fill) ctx.fill();
-    if(stroke) ctx.stroke();
-  }
-
-  function loop(){
-    if(running) update();
-    draw();
-    requestAnimationFrame(loop);
-  }
-
-  reset();
-  loop();
-
-  window.addEventListener('keydown', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    if(e.key === ' ') keys.jump = true;
-    if(e.key === 'r' || e.key === 'R') reset();
-  });
-
-  window.addEventListener('keyup', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-  });
-
-  let touchId = null;
-  window.addEventListener('touchstart', ev=>{
-    for(const t of ev.changedTouches){
-      touchId = t.identifier;
-      const x = t.clientX - canvas.getBoundingClientRect().left;
-      if(x < W/2) keys.left = true;
-      else keys.right = true;
-    }
-  }, {passive:false});
-
-  window.addEventListener('touchend', ev=>{
-    keys.left=false;
-    keys.right=false;
-    touchId=null;
-  }, {passive:false});
-  </script>
-</body>
-</html>
+if(player.x > W) player.x = -player.w;
+ctx.line>>
 
 
 
