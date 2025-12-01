@@ -19,7 +19,6 @@ footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
 <div class="controls">← → to move · Space to jump · R to restart</div>
 <canvas id="game"></canvas>
 <footer>Platform Jumper • Creator: Kevin Cordova • Last updated: Nov 12, 2025</footer>
-
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -35,7 +34,7 @@ let scoreEl = document.getElementById('score');
 let running = true;
 let player, platforms, score;
 let powerups = [];
-let canDoubleJump = false;
+let doubleJumps = 0;
 
 const gravity = 0.55;
 const jumpVel = -12;
@@ -47,7 +46,7 @@ function reset(){
     platforms = [];
     powerups = [];
     score = 0;
-    canDoubleJump = false;
+    doubleJumps = 0;
     platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
     running = true;
@@ -68,7 +67,7 @@ function addPlatform(prevY){
     const minGap = 70;
     const y = prevY - rand(minGap, maxGap);
     platforms.push({x, y, w, h:12, vx});
-    if(Math.random() < 0.1){
+    if(Math.random() < 0.08){
         let tooClose = false;
         for(let pu of powerups){
             if(Math.abs(pu.x - (x + w/2)) < 50 && Math.abs(pu.y - (y - 20)) < 50){
@@ -98,6 +97,7 @@ function update(){
                 if(player.y + player.h <= p.y + player.vy && player.y + player.h + player.vy >= p.y){
                     player.y = p.y - player.h;
                     player.vy = 0;
+                    doubleJumps = doubleJumps; 
                 }
             }
         }
@@ -112,9 +112,9 @@ function update(){
                 break;
             }
         }
-        if(!jumped && canDoubleJump){
+        if(!jumped && doubleJumps > 0){
             player.vy = jumpVel;
-            canDoubleJump = false;
+            doubleJumps--;
         }
         keys.jump = false;
     }
@@ -123,7 +123,7 @@ function update(){
         let pu = powerups[i];
         if(player.x + player.w > pu.x && player.x < pu.x + pu.size &&
            player.y + player.h > pu.y && player.y < pu.y + pu.size){
-            canDoubleJump = true;
+            doubleJumps++;
             powerups.splice(i,1);
         }
     }
