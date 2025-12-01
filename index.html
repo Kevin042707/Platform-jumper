@@ -35,7 +35,6 @@ let scoreEl = document.getElementById('score');
 let running = true;
 let player, platforms, score;
 let powerups = [];
-let hasDoubleJump = false;
 let canDoubleJump = false;
 
 const gravity = 0.55;
@@ -48,7 +47,6 @@ function reset(){
     platforms = [];
     powerups = [];
     score = 0;
-    hasDoubleJump = false;
     canDoubleJump = false;
     platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
@@ -70,8 +68,16 @@ function addPlatform(prevY){
     const minGap = 70;
     const y = prevY - rand(minGap, maxGap);
     platforms.push({x, y, w, h:12, vx});
-    if(Math.random() < 0.15){
-        powerups.push({x: x + w/2 - 10, y: y - 20, size: 18});
+    if(Math.random() < 0.1){
+        let tooClose = false;
+        for(let pu of powerups){
+            if(Math.abs(pu.x - (x + w/2)) < 50 && Math.abs(pu.y - (y - 20)) < 50){
+                tooClose = true; break;
+            }
+        }
+        if(!tooClose){
+            powerups.push({x: x + w/2, y: y - 20, size: 16});
+        }
     }
 }
 
@@ -92,22 +98,21 @@ function update(){
                 if(player.y + player.h <= p.y + player.vy && player.y + player.h + player.vy >= p.y){
                     player.y = p.y - player.h;
                     player.vy = 0;
-                    canDoubleJump = hasDoubleJump;
                 }
             }
         }
     }
 
     if(keys.jump){
-        let onPlatform = false;
+        let jumped = false;
         for(let p of platforms){
             if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
                 player.vy = jumpVel;
-                onPlatform = true;
+                jumped = true;
                 break;
             }
         }
-        if(!onPlatform && canDoubleJump){
+        if(!jumped && canDoubleJump){
             player.vy = jumpVel;
             canDoubleJump = false;
         }
@@ -118,7 +123,6 @@ function update(){
         let pu = powerups[i];
         if(player.x + player.w > pu.x && player.x < pu.x + pu.size &&
            player.y + player.h > pu.y && player.y < pu.y + pu.size){
-            hasDoubleJump = true;
             canDoubleJump = true;
             powerups.splice(i,1);
         }
@@ -170,7 +174,9 @@ function draw(){
 
     for(let pu of powerups){
         ctx.fillStyle = '#ff4d7a';
-        ctx.fillRect(pu.x, pu.y, pu.size, pu.size);
+        ctx.beginPath();
+        ctx.arc(pu.x + pu.size/2, pu.y + pu.size/2, pu.size/2, 0, Math.PI*2);
+        ctx.fill();
     }
 
     ctx.fillStyle = '#ffd166';
