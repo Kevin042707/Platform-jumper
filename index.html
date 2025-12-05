@@ -10,31 +10,39 @@ html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial
 body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
 canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
 .ui{position:fixed;left:16px;top:16px;color:var(--text);font-weight:600}
+.dj{position:fixed;left:16px;top:46px;color:var(--text);font-weight:600}
 .controls{position:fixed;right:16px;top:16px;color:var(--text);font-weight:500;font-size:14px}
 footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
 </style>
 </head>
 <body>
 <div class="ui">Score: <span id="score">0</span></div>
+<div class="dj">Jumps: <span id="djcount">0</span></div>
 <div class="controls">← → to move · Space to jump · R to restart</div>
 <canvas id="game"></canvas>
-<footer>Platform Jumper • Creator: Kevin Cordova • Last updated: Nov 12, 2025</footer>
+<footer>Platform Jumper • Creator: Kevin Cordova • Last updated: 2025</footer>
+
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 const W = 400, H = 700;
-canvas.width = W * DPR; canvas.height = H * DPR;
+canvas.width = W * DPR; 
+canvas.height = H * DPR;
 canvas.style.width = W + 'px';
 canvas.style.height = H + 'px';
 ctx.scale(DPR, DPR);
 
 let keys = {left:false,right:false,jump:false};
 let scoreEl = document.getElementById('score');
+let djEl = document.getElementById('djcount');
+
 let running = true;
 let player, platforms, score;
 let powerups = [];
 let doubleJumps = 0;
+
+let platformSpeedBoost = 1;
 
 const gravity = 0.55;
 const jumpVel = -12;
@@ -47,10 +55,14 @@ function reset(){
     powerups = [];
     score = 0;
     doubleJumps = 0;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0});
+    platformSpeedBoost = 1;
+
+    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0, scored:false});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
+
     running = true;
     scoreEl.textContent = score;
+    djEl.textContent = doubleJumps;
 }
 
 function rand(min,max){return Math.random()*(max-min)+min}
@@ -58,20 +70,25 @@ function rand(min,max){return Math.random()*(max-min)+min}
 function addPlatform(prevY){
     const w = rand(60,120);
     const x = rand(0, W - w);
+
     let vx = 0;
     if(Math.random() < 0.3){
-        const speed = rand(0.5, 2);
+        const speed = rand(0.5, 2) * platformSpeedBoost;
         vx = Math.random() < 0.5 ? -speed : speed;
     }
+
     const maxGap = 110;
     const minGap = 70;
     const y = prevY - rand(minGap, maxGap);
-    platforms.push({x, y, w, h:12, vx});
+
+    platforms.push({x, y, w, h:12, vx, scored:false});
+
     if(Math.random() < 0.08){
         let tooClose = false;
         for(let pu of powerups){
             if(Math.abs(pu.x - (x + w/2)) < 50 && Math.abs(pu.y - (y - 20)) < 50){
-                tooClose = true; break;
+                tooClose = true;
+                break;
             }
         }
         if(!tooClose){
@@ -94,10 +111,15 @@ function update(){
     if(player.vy > 0){
         for(let p of platforms){
             if(player.x + player.w > p.x && player.x < p.x + p.w){
-                if(player.y + player.h <= p.y + player.vy && player.y + player.h + player.vy >= p.y){
+                if(player.y + player.h >= p.y && player.y + player.h <= p.y + 12){
                     player.y = p.y - player.h;
-                    player.vy = 0;
-                    doubleJumps = doubleJumps; 
+                    player.vy = jumpVel;
+
+                    if(!p.scored){
+                        p.scored = true;
+                        score++;
+                        scoreEl.textContent = score;
+                    }
                 }
             }
         }
@@ -106,7 +128,8 @@ function update(){
     if(keys.jump){
         let jumped = false;
         for(let p of platforms){
-            if(Math.abs((player.y + player.h) - p.y) < 1.5 && player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
+            if(Math.abs((player.y + player.h) - p.y) < 1.5 &&
+               player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
                 player.vy = jumpVel;
                 jumped = true;
                 break;
@@ -115,6 +138,7 @@ function update(){
         if(!jumped && doubleJumps > 0){
             player.vy = jumpVel;
             doubleJumps--;
+            djEl.textContent = doubleJumps;
         }
         keys.jump = false;
     }
@@ -124,25 +148,28 @@ function update(){
         if(player.x + player.w > pu.x && player.x < pu.x + pu.size &&
            player.y + player.h > pu.y && player.y < pu.y + pu.size){
             doubleJumps++;
+            djEl.textContent = doubleJumps;
             powerups.splice(i,1);
         }
     }
 
     if(player.y < H/3){
         const dy = Math.min((H/3 - player.y)*0.2, 12);
+
         player.y += dy;
-        for(let i=0;i<platforms.length;i++) platforms[i].y += dy;
-        for(let i=0;i<powerups.length;i++) powerups[i].y += dy;
-        score += Math.min(Math.round(dy), 12);
-        scoreEl.textContent = score;
+        for(let p of platforms) p.y += dy;
+        for(let pu of powerups) pu.y += dy;
+
+        if(score % 25 === 0) platformSpeedBoost = 1 + (score / 150);
+
         while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
     }
 
     for(let p of platforms){
         if(p.vx){
             p.x += p.vx;
-            if(p.x < 0) { p.x = 0; p.vx *= -1; }
-            if(p.x + p.w > W) { p.x = W - p.w; p.vx *= -1; }
+            if(p.x < 0){ p.x = 0; p.vx *= -1; }
+            if(p.x + p.w > W){ p.x = W - p.w; p.vx *= -1; }
         }
     }
 
@@ -154,6 +181,7 @@ function update(){
 
 function draw(){
     ctx.clearRect(0,0,W,H);
+
     const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0,'#071228');
     g.addColorStop(1,'#071028');
@@ -188,6 +216,7 @@ function draw(){
     ctx.fillStyle = '#e6eef8';
     ctx.font = '600 18px Inter,Arial';
     ctx.fillText('Score: ' + score, 12, 28);
+    ctx.fillText('Jumps: ' + doubleJumps, 12, 55);
 
     if(!running){
         ctx.fillStyle = 'rgba(2,6,23,0.7)';
@@ -218,7 +247,11 @@ function roundRect(ctx,x,y,w,h,r,fill,stroke){
     if(stroke) ctx.stroke();
 }
 
-function loop(){ if(running) update(); draw(); requestAnimationFrame(loop); }
+function loop(){
+    if(running) update();
+    draw();
+    requestAnimationFrame(loop);
+}
 
 reset();
 loop();
@@ -243,13 +276,13 @@ window.addEventListener('touchstart', ev=>{
         if(x < W/2) keys.left = true;
         else keys.right = true;
     }
-}, {passive:false});
+},{passive:false});
 
 window.addEventListener('touchend', ev=>{
     keys.left=false;
     keys.right=false;
     touchId=null;
-}, {passive:false});
+},{passive:false});
 </script>
 </body>
 </html>
