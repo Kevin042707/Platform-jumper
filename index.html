@@ -41,7 +41,6 @@ let running = true;
 let player, platforms, score;
 let powerups = [];
 let doubleJumps = 0;
-
 let platformSpeedBoost = 1;
 
 const gravity = 0.55;
@@ -56,10 +55,8 @@ function reset(){
     score = 0;
     doubleJumps = 0;
     platformSpeedBoost = 1;
-
     platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0, scored:false});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
-
     running = true;
     scoreEl.textContent = score;
     djEl.textContent = doubleJumps;
@@ -70,17 +67,14 @@ function rand(min,max){return Math.random()*(max-min)+min}
 function addPlatform(prevY){
     const w = rand(60,120);
     const x = rand(0, W - w);
-
     let vx = 0;
     if(Math.random() < 0.3){
         const speed = rand(0.5, 2) * platformSpeedBoost;
         vx = Math.random() < 0.5 ? -speed : speed;
     }
-
     const maxGap = 110;
     const minGap = 70;
     const y = prevY - rand(minGap, maxGap);
-
     platforms.push({x, y, w, h:12, vx, scored:false});
 
     if(Math.random() < 0.08){
@@ -113,8 +107,7 @@ function update(){
             if(player.x + player.w > p.x && player.x < p.x + p.w){
                 if(player.y + player.h >= p.y && player.y + player.h <= p.y + 12){
                     player.y = p.y - player.h;
-                    player.vy = jumpVel;
-
+                    player.vy = 0;
                     if(!p.scored){
                         p.scored = true;
                         score++;
@@ -155,13 +148,10 @@ function update(){
 
     if(player.y < H/3){
         const dy = Math.min((H/3 - player.y)*0.2, 12);
-
         player.y += dy;
         for(let p of platforms) p.y += dy;
         for(let pu of powerups) pu.y += dy;
-
         if(score % 25 === 0) platformSpeedBoost = 1 + (score / 150);
-
         while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
     }
 
@@ -286,7 +276,6 @@ window.addEventListener('touchend', ev=>{
 </script>
 </body>
 </html>
-
 
 
 
