@@ -39,9 +39,7 @@ let djEl = document.getElementById('djcount');
 
 let running = true;
 let player, platforms, score;
-let powerups = [];
 let doubleJumps = 0;
-let platformSpeedBoost = 1;
 
 const gravity = 0.55;
 const jumpVel = -12;
@@ -51,11 +49,9 @@ const maxFall = 18;
 function reset(){
     player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
     platforms = [];
-    powerups = [];
     score = 0;
     doubleJumps = 0;
-    platformSpeedBoost = 1;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, vx:0, scored:false});
+    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, scored:false});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
     running = true;
     scoreEl.textContent = score;
@@ -67,28 +63,8 @@ function rand(min,max){return Math.random()*(max-min)+min}
 function addPlatform(prevY){
     const w = rand(60,120);
     const x = rand(0, W - w);
-    let vx = 0;
-    if(Math.random() < 0.3){
-        const speed = rand(0.5, 2) * platformSpeedBoost;
-        vx = Math.random() < 0.5 ? -speed : speed;
-    }
-    const maxGap = 110;
-    const minGap = 70;
-    const y = prevY - rand(minGap, maxGap);
-    platforms.push({x, y, w, h:12, vx, scored:false});
-
-    if(Math.random() < 0.08){
-        let tooClose = false;
-        for(let pu of powerups){
-            if(Math.abs(pu.x - (x + w/2)) < 50 && Math.abs(pu.y - (y - 20)) < 50){
-                tooClose = true;
-                break;
-            }
-        }
-        if(!tooClose){
-            powerups.push({x: x + w/2, y: y - 20, size: 16});
-        }
-    }
+    const y = prevY - rand(70, 110);
+    platforms.push({x, y, w, h:12, scored:false});
 }
 
 function update(){
@@ -136,35 +112,14 @@ function update(){
         keys.jump = false;
     }
 
-    for(let i = powerups.length-1; i >= 0; i--){
-        let pu = powerups[i];
-        if(player.x + player.w > pu.x && player.x < pu.x + pu.size &&
-           player.y + player.h > pu.y && player.y < pu.y + pu.size){
-            doubleJumps++;
-            djEl.textContent = doubleJumps;
-            powerups.splice(i,1);
-        }
-    }
-
     if(player.y < H/3){
         const dy = Math.min((H/3 - player.y)*0.2, 12);
         player.y += dy;
         for(let p of platforms) p.y += dy;
-        for(let pu of powerups) pu.y += dy;
-        if(score % 25 === 0) platformSpeedBoost = 1 + (score / 150);
         while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
     }
 
-    for(let p of platforms){
-        if(p.vx){
-            p.x += p.vx;
-            if(p.x < 0){ p.x = 0; p.vx *= -1; }
-            if(p.x + p.w > W){ p.x = W - p.w; p.vx *= -1; }
-        }
-    }
-
     platforms = platforms.filter(p => p.y < H + 50);
-    powerups = powerups.filter(p => p.y < H + 50);
 
     if(player.y > H + 80) running = false;
 }
@@ -188,13 +143,6 @@ function draw(){
     for(let p of platforms){
         ctx.fillStyle = '#63ace5';
         roundRect(ctx, p.x, p.y, p.w, p.h, 6, true, false);
-    }
-
-    for(let pu of powerups){
-        ctx.fillStyle = '#ff4d7a';
-        ctx.beginPath();
-        ctx.arc(pu.x + pu.size/2, pu.y + pu.size/2, pu.size/2, 0, Math.PI*2);
-        ctx.fill();
     }
 
     ctx.fillStyle = '#ffd166';
