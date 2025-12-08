@@ -35,7 +35,6 @@ let keys={left:false,right:false,jump:false};
 let scoreEl=document.getElementById('score');
 let running=true;
 let player,platforms,score;
-let shakeTime=0,shakeIntensity=0;
 
 const gravity=0.55;
 const jumpVel=-12;
@@ -57,24 +56,9 @@ function rand(a,b){return Math.random()*(b-a)+a}
 function addPlatform(prevY){
     const w=rand(60,120);
     const x=rand(0,W-w);
-    const y=prevY-rand(70,110);
+    const extra=Math.min(score*0.2,25);
+    const y=prevY-rand(70+extra,110+extra);
     platforms.push({x,y,w,h:12,scored:false});
-}
-
-function startShake(time,intensity){
-    shakeTime=time;
-    shakeIntensity=intensity;
-}
-
-function updateShake(){
-    if(shakeTime>0){
-        shakeTime--;
-        return {
-            x:(Math.random()*2-1)*shakeIntensity,
-            y:(Math.random()*2-1)*shakeIntensity
-        };
-    }
-    return {x:0,y:0};
 }
 
 function update(){
@@ -99,7 +83,6 @@ function update(){
                     player.y=p.y-player.h;
                     player.vy=0;
                     landed=true;
-                    if(wasFalling) startShake(8,2.2);
                     if(!p.scored){
                         p.scored=true;
                         score++;
@@ -133,14 +116,12 @@ function update(){
     platforms=platforms.filter(p=>p.y<H+50);
 
     if(player.y>H+60){
-        startShake(25,4.5);
         running=false;
     }
 }
 
 function draw(){
-    const shake=updateShake();
-    ctx.setTransform(DPR,0,0,DPR,shake.x,shake.y);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
 
     ctx.clearRect(0,0,W,H);
     const g=ctx.createLinearGradient(0,0,0,H);
