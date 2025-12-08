@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Platform Jumper</title>
 <style>
-:root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8}
+:root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8;--power:#ff4d7a}
 html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
 body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
 canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
@@ -15,7 +15,7 @@ footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
 </style>
 </head>
 <body>
-<div class="ui">Score: <span id="score">0</span></div>
+<div class="ui">Score: <span id="score">0</span> | Jumps: <span id="dj">0</span></div>
 <div class="controls">← → to move · Space to jump · R to restart</div>
 <canvas id="game"></canvas>
 <footer>Platform Jumper • Creator: Kevin Cordova • Last updated: December 7, 2025</footer>
@@ -33,8 +33,10 @@ ctx.scale(DPR,DPR);
 
 let keys={left:false,right:false,jump:false};
 let scoreEl=document.getElementById('score');
+let djEl=document.getElementById('dj');
 let running=true;
 let player,platforms,score;
+let powerups=[];
 
 const gravity=0.55;
 const jumpVel=-12;
@@ -42,16 +44,15 @@ const playerW=36,playerH=36;
 const maxFall=18;
 
 function reset(){
-    player={x:W/2-playerW/2,y:H-120,vx:0,vy:0,w:playerW,h:playerH,onGround:false};
+    player={x:W/2-playerW/2,y:H-120,vx:0,vy:0,w:playerW,h:playerH,onPlatform:null};
     platforms=[];
+    powerups=[];
     score=0;
-
-    platforms.push({x:W/2-50,y:H-80,w:100,h:12,scored:false,vx:0});
-
+    platforms.push({x:W/2-50,y:H-80,w:100,h:12,scored:false,type:'static',vx:0});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
-
     running=true;
     scoreEl.textContent=score;
+    djEl.textContent='0';
 }
 
 function rand(a,b){return Math.random()*(b-a)+a}
@@ -59,80 +60,145 @@ function rand(a,b){return Math.random()*(b-a)+a}
 function addPlatform(prevY){
     const w=rand(60,120);
     const x=rand(0,W-w);
-    const y=prevY-rand(80,120);
-
-    let vx = 0;
+    const y=prevY-rand(70,110);
+    let vx=0;
     if(Math.random()<0.35){
-        vx = rand(0.6,1.4) * (Math.random()<0.5?-1:1);
+        vx=rand(0.6,1.4)*(Math.random()<0.5?-1:1);
     }
+    const p={x,y,w,h:12,scored:false,type:vx===0?'static':'h',vx};
+    platforms.push(p);
+    if(Math.random()<0.08){
+        let tooClose=false;
+        const centerX = x + w/2;
+        for(let pu of powerups){
+            if(!pu.parent) continue;
+            const px = pu.parent.x + pu.parent.w/2;
+            const py = pu.parent.y;
+            if(Math.abs(px - centerX) < 80 && Math.abs(py - (y - 18)) < 60){
+                tooClose=true; break;
+            }
+        }
+        if(!tooClose){
+            powerups.push({parent:p, size:14});
+        }
+    }
+}
 
-    platforms.push({x,y,w,h:12,scored:false,vx});
+function updatePlatforms(){
+    for(let p of platforms){
+        if(p.type==='h' && p.vx){
+            p.x += p.vx;
+            if(p.x < 0){ p.x = 0; p.vx *= -1; }
+            if(p.x + p.w > W){ p.x = W - p.w; p.vx *= -1; }
+        }
+    }
+}
+
+function collectPowerup(puIndex){
+    const pu = powerups[puIndex];
+    if(!pu || !pu.parent) return;
+    if(powerups[puIndex]) powerups.splice(puIndex,1);
+    player.doubleJumps = (player.doubleJumps||0) + 1;
+    djEl.textContent = player.doubleJumps;
 }
 
 function update(){
-    player.vx+=(keys.left?-0.6:0)+(keys.right?0.6:0);
-    player.vx*=(!keys.left&&!keys.right)?0.9:0.97;
+    player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
+    player.vx *= (!keys.left && !keys.right) ? 0.9 : 0.97;
 
-    const wasFalling=player.vy>0;
+    const wasFalling = player.vy > 0;
 
-    player.vy+=gravity;
-    player.vy=Math.min(player.vy,maxFall);
-    player.x+=player.vx;
-    player.y+=player.vy;
+    player.vy += gravity;
+    player.vy = Math.min(player.vy, maxFall);
 
-    if(player.x>W) player.x=-player.w;
-    if(player.x+player.w<0) player.x=W;
+    updatePlatforms();
 
-    if(player.vy>0){
+    if(player.onPlatform){
+        const p = player.onPlatform;
+        if(p && platforms.indexOf(p)!==-1){
+            if(p.type==='h') player.x += p.vx;
+        } else {
+            player.onPlatform = null;
+        }
+    }
+
+    player.x += player.vx;
+    player.y += player.vy;
+
+    if(player.x > W) player.x = -player.w;
+    if(player.x + player.w < 0) player.x = W;
+
+    if(player.vy > 0){
         let landed=false;
         for(let p of platforms){
-            if(player.x+player.w>p.x && player.x<p.x+p.w){
-                if(player.y+player.h>=p.y && player.y+player.h<=p.y+12){
-                    player.y=p.y-player.h;
-                    player.vy=0;
+            if(player.x + player.w > p.x && player.x < p.x + p.w){
+                if(player.y + player.h >= p.y && player.y + player.h <= p.y + 12){
+                    player.y = p.y - player.h;
+                    player.vy = 0;
                     landed=true;
+                    player.onPlatform = p;
                     if(!p.scored){
-                        p.scored=true;
+                        p.scored = true;
                         score++;
-                        scoreEl.textContent=score;
+                        scoreEl.textContent = score;
                     }
+                    break;
                 }
             }
         }
-        if(!landed) player.onGround=false;
+        if(!landed) player.onPlatform = null;
     }
 
     if(keys.jump){
+        let jumped=false;
         for(let p of platforms){
-            if(Math.abs((player.y+player.h)-p.y)<1.5 &&
-               player.x+player.w>p.x+2 &&
-               player.x<p.x+p.w-2){
-                player.vy=jumpVel;
+            if(Math.abs((player.y + player.h) - p.y) < 1.5 &&
+               player.x + player.w > p.x + 2 &&
+               player.x < p.x + p.w - 2){
+                player.vy = jumpVel;
+                player.onPlatform = null;
+                jumped = true;
                 break;
             }
         }
-        keys.jump=false;
+        if(!jumped && (player.doubleJumps||0) > 0){
+            player.vy = jumpVel;
+            player.doubleJumps--;
+            djEl.textContent = player.doubleJumps;
+            player.onPlatform = null;
+        }
+        keys.jump = false;
     }
 
-    if(player.y<H/3){
-        const dy=Math.min((H/3-player.y)*0.2,12);
-        player.y+=dy;
-        for(let p of platforms) p.y+=dy;
-        while(platforms.length<9) addPlatform(platforms[platforms.length-1].y);
-    }
-
-    for(let p of platforms){
-        if(p.vx!==0){
-            p.x+=p.vx;
-            if(p.x<0){p.x=0;p.vx*=-1}
-            if(p.x+p.w>W){p.x=W-p.w;p.vx*=-1}
+    for(let i = powerups.length - 1; i >= 0; i--){
+        const pu = powerups[i];
+        if(!pu.parent || platforms.indexOf(pu.parent)===-1){
+            powerups.splice(i,1);
+            continue;
+        }
+        const px = pu.parent.x + pu.parent.w/2 - pu.size/2;
+        const py = pu.parent.y - 18 - pu.size/2;
+        if(player.x + player.w > px && player.x < px + pu.size &&
+           player.y + player.h > py && player.y < py + pu.size){
+            collectPowerup(i);
         }
     }
 
-    platforms=platforms.filter(p=>p.y<H+50);
+    if(player.y < H/3){
+        const dy = Math.min((H/3 - player.y) * 0.2, 12);
+        player.y += dy;
+        for(let p of platforms) p.y += dy;
+        for(let pu of powerups){
+            if(pu.parent) pu.parent.y += dy;
+        }
+        while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
+    }
 
-    if(player.y>H+60){
-        running=false;
+    platforms = platforms.filter(p => p.y < H + 50);
+    powerups = powerups.filter(pu => pu.parent && platforms.indexOf(pu.parent)!==-1);
+
+    if(player.y > H + 60){
+        running = false;
     }
 }
 
@@ -140,28 +206,41 @@ function draw(){
     ctx.setTransform(DPR,0,0,DPR,0,0);
 
     ctx.clearRect(0,0,W,H);
-    const g=ctx.createLinearGradient(0,0,0,H);
+    const g = ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0,'#071228');
     g.addColorStop(1,'#071028');
-    ctx.fillStyle=g;
+    ctx.fillStyle = g;
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalAlpha=0.06;
+    ctx.globalAlpha = 0.06;
     for(let i=0;i<8;i++){
-        ctx.fillStyle='#fff';
+        ctx.fillStyle = '#fff';
         ctx.fillRect((i*70+score*0.4)%(W+120)-60,40+(i%3)*20,120,20);
     }
-    ctx.globalAlpha=1;
+    ctx.globalAlpha = 1;
 
     for(let p of platforms){
-        ctx.fillStyle='#63ace5';
+        ctx.fillStyle = '#63ace5';
         roundRect(ctx,p.x,p.y,p.w,p.h,6,true,false);
+        if(p.type==='h'){
+            ctx.fillStyle='rgba(0,0,0,0.06)';
+            ctx.fillRect(p.x,p.y-6,p.w,3);
+        }
     }
 
-    ctx.fillStyle='#ffd166';
+    for(let pu of powerups){
+        const px = pu.parent.x + pu.parent.w/2;
+        const py = pu.parent.y - 18;
+        ctx.fillStyle = 'var(--power)';
+        ctx.beginPath();
+        ctx.arc(px, py, pu.size/2, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    ctx.fillStyle = '#ffd166';
     roundRect(ctx,player.x,player.y,player.w,player.h,8,true,false);
 
-    ctx.fillStyle='#00000033';
+    ctx.fillStyle = '#00000033';
     ctx.fillRect(player.x+8,player.y+12,6,6);
     ctx.fillRect(player.x+player.w-14,player.y+12,6,6);
 
@@ -205,7 +284,7 @@ loop();
 window.addEventListener('keydown',e=>{
     if(e.key==='ArrowLeft'||e.key==='a') keys.left=true;
     if(e.key==='ArrowRight'||e.key==='d') keys.right=true;
-    if(e.key===' ') keys.jump=true;
+    if(e.key===' '||e.key==='Spacebar') keys.jump=true;
     if(e.key==='r'||e.key==='R') reset();
 });
 window.addEventListener('keyup',e=>{
