@@ -18,156 +18,179 @@ footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
 <div class="ui">Score: <span id="score">0</span></div>
 <div class="controls">← → to move · Space to jump · R to restart</div>
 <canvas id="game"></canvas>
-<footer>Platform Jumper • Creator: Kevin Cordova • Last updated: 2025</footer>
+<footer>Platform Jumper • Creator: Kevin Cordova • Last updated: December 7, 2025</footer>
 
 <script>
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
-const W = 400, H = 700;
-canvas.width = W * DPR; 
-canvas.height = H * DPR;
-canvas.style.width = W + 'px';
-canvas.style.height = H + 'px';
-ctx.scale(DPR, DPR);
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const DPR=Math.min(window.devicePixelRatio||1,2);
+const W=400,H=700;
+canvas.width=W*DPR;
+canvas.height=H*DPR;
+canvas.style.width=W+'px';
+canvas.style.height=H+'px';
+ctx.scale(DPR,DPR);
 
-let keys = {left:false,right:false,jump:false};
-let scoreEl = document.getElementById('score');
+let keys={left:false,right:false,jump:false};
+let scoreEl=document.getElementById('score');
+let running=true;
+let player,platforms,score;
+let shakeTime=0,shakeIntensity=0;
 
-let running = true;
-let player, platforms, score;
-
-const gravity = 0.55;
-const jumpVel = -12;
-const playerW = 36, playerH = 36;
-const maxFall = 18;
+const gravity=0.55;
+const jumpVel=-12;
+const playerW=36,playerH=36;
+const maxFall=18;
 
 function reset(){
-    player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
-    platforms = [];
-    score = 0;
-    platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, scored:false});
+    player={x:W/2-playerW/2,y:H-120,vx:0,vy:0,w:playerW,h:playerH,onGround:false};
+    platforms=[];
+    score=0;
+    platforms.push({x:W/2-50,y:H-80,w:100,h:12,scored:false});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
-    running = true;
-    scoreEl.textContent = score;
+    running=true;
+    scoreEl.textContent=score;
 }
 
-function rand(min,max){return Math.random()*(max-min)+min}
+function rand(a,b){return Math.random()*(b-a)+a}
 
 function addPlatform(prevY){
-    const w = rand(60,120);
-    const x = rand(0, W - w);
-    const y = prevY - rand(70, 110);
-    platforms.push({x, y, w, h:12, scored:false});
+    const w=rand(60,120);
+    const x=rand(0,W-w);
+    const y=prevY-rand(70,110);
+    platforms.push({x,y,w,h:12,scored:false});
+}
+
+function startShake(time,intensity){
+    shakeTime=time;
+    shakeIntensity=intensity;
+}
+
+function updateShake(){
+    if(shakeTime>0){
+        shakeTime--;
+        return {
+            x:(Math.random()*2-1)*shakeIntensity,
+            y:(Math.random()*2-1)*shakeIntensity
+        };
+    }
+    return {x:0,y:0};
 }
 
 function update(){
-    player.vx += (keys.left?-0.6:0) + (keys.right?0.6:0);
-    player.vx *= (!keys.left && !keys.right) ? 0.9 : 0.97;
-    player.vy += gravity;
-    player.vy = Math.min(player.vy, maxFall);
-    player.x += player.vx;
-    player.y += player.vy;
+    player.vx+=(keys.left?-0.6:0)+(keys.right?0.6:0);
+    player.vx*=(!keys.left&&!keys.right)?0.9:0.97;
 
-    if(player.x > W) player.x = -player.w;
-    if(player.x + player.w < 0) player.x = W;
+    const wasFalling=player.vy>0;
 
-    if(player.vy > 0){
+    player.vy+=gravity;
+    player.vy=Math.min(player.vy,maxFall);
+    player.x+=player.vx;
+    player.y+=player.vy;
+
+    if(player.x>W) player.x=-player.w;
+    if(player.x+player.w<0) player.x=W;
+
+    if(player.vy>0){
+        let landed=false;
         for(let p of platforms){
-            if(player.x + player.w > p.x && player.x < p.x + p.w){
-                if(player.y + player.h >= p.y && player.y + player.h <= p.y + 12){
-                    player.y = p.y - player.h;
-                    player.vy = 0;
+            if(player.x+player.w>p.x && player.x<p.x+p.w){
+                if(player.y+player.h>=p.y && player.y+player.h<=p.y+12){
+                    player.y=p.y-player.h;
+                    player.vy=0;
+                    landed=true;
+                    if(wasFalling) startShake(8,2.2);
                     if(!p.scored){
-                        p.scored = true;
+                        p.scored=true;
                         score++;
-                        scoreEl.textContent = score;
+                        scoreEl.textContent=score;
                     }
                 }
             }
         }
+        if(!landed) player.onGround=false;
     }
 
     if(keys.jump){
-        let jumped = false;
         for(let p of platforms){
-            if(Math.abs((player.y + player.h) - p.y) < 1.5 &&
-               player.x + player.w > p.x+2 && player.x < p.x + p.w-2){
-                player.vy = jumpVel;
-                jumped = true;
+            if(Math.abs((player.y+player.h)-p.y)<1.5 &&
+               player.x+player.w>p.x+2 &&
+               player.x<p.x+p.w-2){
+                player.vy=jumpVel;
                 break;
             }
         }
-        keys.jump = false;
+        keys.jump=false;
     }
 
-    if(player.y < H/3){
-        const dy = Math.min((H/3 - player.y)*0.2, 12);
-        player.y += dy;
-        for(let p of platforms) p.y += dy;
-        while(platforms.length < 9) addPlatform(platforms[platforms.length-1].y);
+    if(player.y<H/3){
+        const dy=Math.min((H/3-player.y)*0.2,12);
+        player.y+=dy;
+        for(let p of platforms) p.y+=dy;
+        while(platforms.length<9) addPlatform(platforms[platforms.length-1].y);
     }
 
-    platforms = platforms.filter(p => p.y < H + 50);
+    platforms=platforms.filter(p=>p.y<H+50);
 
-    if(player.y > H + 80) running = false;
+    if(player.y>H+60){
+        startShake(25,4.5);
+        running=false;
+    }
 }
 
 function draw(){
-    ctx.clearRect(0,0,W,H);
+    const shake=updateShake();
+    ctx.setTransform(DPR,0,0,DPR,shake.x,shake.y);
 
-    const g = ctx.createLinearGradient(0,0,0,H);
+    ctx.clearRect(0,0,W,H);
+    const g=ctx.createLinearGradient(0,0,0,H);
     g.addColorStop(0,'#071228');
     g.addColorStop(1,'#071028');
-    ctx.fillStyle = g;
+    ctx.fillStyle=g;
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalAlpha = 0.06;
+    ctx.globalAlpha=0.06;
     for(let i=0;i<8;i++){
-        ctx.fillStyle = '#fff';
-        ctx.fillRect((i*70 + score*0.4)% (W+120) - 60, 40 + (i%3)*20, 120, 20);
+        ctx.fillStyle='#fff';
+        ctx.fillRect((i*70+score*0.4)%(W+120)-60,40+(i%3)*20,120,20);
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha=1;
 
     for(let p of platforms){
-        ctx.fillStyle = '#63ace5';
-        roundRect(ctx, p.x, p.y, p.w, p.h, 6, true, false);
+        ctx.fillStyle='#63ace5';
+        roundRect(ctx,p.x,p.y,p.w,p.h,6,true,false);
     }
 
-    ctx.fillStyle = '#ffd166';
-    roundRect(ctx, player.x, player.y, player.w, player.h, 8, true, false);
-    ctx.fillStyle = '#00000033';
-    ctx.fillRect(player.x + 8, player.y + 12, 6, 6);
-    ctx.fillRect(player.x + player.w - 14, player.y + 12, 6, 6);
+    ctx.fillStyle='#ffd166';
+    roundRect(ctx,player.x,player.y,player.w,player.h,8,true,false);
 
-    ctx.fillStyle = '#e6eef8';
-    ctx.font = '600 18px Inter,Arial';
-    ctx.fillText('Score: ' + score, 12, 28);
+    ctx.fillStyle='#00000033';
+    ctx.fillRect(player.x+8,player.y+12,6,6);
+    ctx.fillRect(player.x+player.w-14,player.y+12,6,6);
 
     if(!running){
-        ctx.fillStyle = 'rgba(2,6,23,0.7)';
+        ctx.fillStyle='rgba(2,6,23,0.7)';
         ctx.fillRect(0,0,W,H);
-        ctx.fillStyle = '#e6eef8';
-        ctx.font = '700 26px Arial';
-        ctx.fillText('Game Over', W/2 - 70, H/2 - 10);
-        ctx.font = '500 14px Arial';
-        ctx.fillText('Press R to restart', W/2 - 68, H/2 + 18);
+        ctx.fillStyle='#e6eef8';
+        ctx.font='700 26px Arial';
+        ctx.fillText('Game Over',W/2-70,H/2-10);
+        ctx.font='500 14px Arial';
+        ctx.fillText('Press R to restart',W/2-68,H/2+18);
     }
 }
 
 function roundRect(ctx,x,y,w,h,r,fill,stroke){
-    if(typeof r === 'undefined') r=4;
-    if(typeof r === 'number') r={tl:r,tr:r,br:r,bl:r};
+    if(typeof r==='number') r={tl:r,tr:r,br:r,bl:r};
     ctx.beginPath();
-    ctx.moveTo(x + r.tl, y);
-    ctx.lineTo(x + w - r.tr, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
-    ctx.lineTo(x + w, y + h - r.br);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
-    ctx.lineTo(x + r.bl, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
-    ctx.lineTo(x, y + r.tl);
-    ctx.quadraticCurveTo(x, y, x + r.tl, y);
+    ctx.moveTo(x+r.tl,y);
+    ctx.lineTo(x+w-r.tr,y);
+    ctx.quadraticCurveTo(x+w,y,x+w,y+r.tr);
+    ctx.lineTo(x+w,y+h-r.br);
+    ctx.quadraticCurveTo(x+w,y+h,x+w-r.br,y+h);
+    ctx.lineTo(x+r.bl,y+h);
+    ctx.quadraticCurveTo(x,y+h,x,y+h-r.bl);
+    ctx.lineTo(x,y+r.tl);
+    ctx.quadraticCurveTo(x,y,x+r.tl,y);
     ctx.closePath();
     if(fill) ctx.fill();
     if(stroke) ctx.stroke();
@@ -182,29 +205,27 @@ function loop(){
 reset();
 loop();
 
-window.addEventListener('keydown', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
-    if(e.key === ' ') keys.jump = true;
-    if(e.key === 'r' || e.key === 'R') reset();
+window.addEventListener('keydown',e=>{
+    if(e.key==='ArrowLeft'||e.key==='a') keys.left=true;
+    if(e.key==='ArrowRight'||e.key==='d') keys.right=true;
+    if(e.key===' ') keys.jump=true;
+    if(e.key==='r'||e.key==='R') reset();
+});
+window.addEventListener('keyup',e=>{
+    if(e.key==='ArrowLeft'||e.key==='a') keys.left=false;
+    if(e.key==='ArrowRight'||e.key==='d') keys.right=false;
 });
 
-window.addEventListener('keyup', e => {
-    if(e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
-    if(e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
-});
-
-let touchId = null;
-window.addEventListener('touchstart', ev=>{
+let touchId=null;
+window.addEventListener('touchstart',ev=>{
     for(const t of ev.changedTouches){
-        touchId = t.identifier;
-        const x = t.clientX - canvas.getBoundingClientRect().left;
-        if(x < W/2) keys.left = true;
-        else keys.right = true;
+        touchId=t.identifier;
+        const x=t.clientX-canvas.getBoundingClientRect().left;
+        if(x<W/2) keys.left=true;
+        else keys.right=true;
     }
 },{passive:false});
-
-window.addEventListener('touchend', ev=>{
+window.addEventListener('touchend',ev=>{
     keys.left=false;
     keys.right=false;
     touchId=null;
