@@ -5,19 +5,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Platform Jumper</title>
 <style>
-:root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8;--power:#ff4d7a}
+:root{--bg:#0f1724;--player:#ffd166;--platform:#63ace5;--text:#e6eef8}
 html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
 body{background:linear-gradient(180deg,#071028 0%, #0f1724 100%);display:flex;align-items:center;justify-content:center}
 canvas{display:block;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
 .ui{position:fixed;left:16px;top:16px;color:var(--text);font-weight:600}
-.dj{position:fixed;left:16px;top:46px;color:var(--text);font-weight:600}
 .controls{position:fixed;right:16px;top:16px;color:var(--text);font-weight:500;font-size:14px}
 footer{position:fixed;left:16px;bottom:16px;color:#98a2b3;font-size:13px}
 </style>
 </head>
 <body>
 <div class="ui">Score: <span id="score">0</span></div>
-<div class="dj">Jumps: <span id="djcount">0</span></div>
 <div class="controls">← → to move · Space to jump · R to restart</div>
 <canvas id="game"></canvas>
 <footer>Platform Jumper • Creator: Kevin Cordova • Last updated: 2025</footer>
@@ -35,11 +33,9 @@ ctx.scale(DPR, DPR);
 
 let keys = {left:false,right:false,jump:false};
 let scoreEl = document.getElementById('score');
-let djEl = document.getElementById('djcount');
 
 let running = true;
 let player, platforms, score;
-let doubleJumps = 0;
 
 const gravity = 0.55;
 const jumpVel = -12;
@@ -50,12 +46,10 @@ function reset(){
     player = {x: W/2 - playerW/2, y: H - 120, vx:0, vy:0, w:playerW, h:playerH};
     platforms = [];
     score = 0;
-    doubleJumps = 0;
     platforms.push({x: W/2 - 50, y: H-80, w:100, h:12, scored:false});
     for(let i=0;i<7;i++) addPlatform(platforms[platforms.length-1].y);
     running = true;
     scoreEl.textContent = score;
-    djEl.textContent = doubleJumps;
 }
 
 function rand(min,max){return Math.random()*(max-min)+min}
@@ -104,11 +98,6 @@ function update(){
                 break;
             }
         }
-        if(!jumped && doubleJumps > 0){
-            player.vy = jumpVel;
-            doubleJumps--;
-            djEl.textContent = doubleJumps;
-        }
         keys.jump = false;
     }
 
@@ -154,7 +143,6 @@ function draw(){
     ctx.fillStyle = '#e6eef8';
     ctx.font = '600 18px Inter,Arial';
     ctx.fillText('Score: ' + score, 12, 28);
-    ctx.fillText('Jumps: ' + doubleJumps, 12, 55);
 
     if(!running){
         ctx.fillStyle = 'rgba(2,6,23,0.7)';
